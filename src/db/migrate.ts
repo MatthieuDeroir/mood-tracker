@@ -28,16 +28,16 @@ async function runMigration() {
         await ensureDefaultUser();
 
         // Récupérer des statistiques de la base de données
-        const userCount = await db.select({ count: sql`count(*)` }).from(schema.users);
-        const moodCount = await db.select({ count: sql`count(*)` }).from(schema.moodEntries);
+        const userResult = await db.execute(sql`SELECT COUNT(*) FROM users`);
+        const moodResult = await db.execute(sql`SELECT COUNT(*) FROM mood_entries`);
 
         console.log(`📊 Statistiques de la base de données:`);
-        console.log(`   - Utilisateurs: ${userCount[0]?.count || 0}`);
-        console.log(`   - Entrées d'humeur: ${moodCount[0]?.count || 0}`);
+        console.log(`   - Utilisateurs: ${userResult[0]?.[0]?.count || 0}`);
+        console.log(`   - Entrées d'humeur: ${moodResult[0]?.[0]?.count || 0}`);
 
         // Afficher la version PostgreSQL
         const versionResult = await db.execute(sql`SELECT version()`);
-        console.log(`📦 Version PostgreSQL: ${versionResult.rows[0].version}`);
+        console.log(`📦 Version PostgreSQL: ${versionResult[0]?.[0]?.version || 'Inconnue'}`);
 
         console.log('✅ Migration terminée avec succès!');
 
@@ -55,39 +55,39 @@ async function createTablesManually() {
 
         // Créer la table des utilisateurs
         await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS "users" (
-        "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        "email" VARCHAR(255) NOT NULL UNIQUE,
-        "name" VARCHAR(255) NOT NULL,
-        "settings" JSONB NOT NULL DEFAULT '{"timezone":"Europe/Paris","moodLabels":{"0":"Terrible","1":"Très mal","2":"Mal","3":"Pas bien","4":"Faible","5":"Neutre","6":"Correct","7":"Bien","8":"Très bien","9":"Super","10":"Incroyable"}}',
-        "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
-        "updated_at" TIMESTAMP NOT NULL DEFAULT NOW()
-      )
-    `);
+            CREATE TABLE IF NOT EXISTS "users" (
+                                                   "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                                                   "email" VARCHAR(255) NOT NULL UNIQUE,
+                                                   "name" VARCHAR(255) NOT NULL,
+                                                   "settings" JSONB NOT NULL DEFAULT '{"timezone":"Europe/Paris","moodLabels":{"0":"Terrible","1":"Très mal","2":"Mal","3":"Pas bien","4":"Faible","5":"Neutre","6":"Correct","7":"Bien","8":"Très bien","9":"Super","10":"Incroyable"}}',
+                                                   "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
+                                                   "updated_at" TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+        `);
 
         // Créer la table des entrées d'humeur
         await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS "mood_entries" (
-        "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        "user_id" UUID NOT NULL,
-        "mood" INTEGER NOT NULL CHECK (mood >= 0 AND mood <= 10),
-        "note" TEXT,
-        "tags" JSONB NOT NULL DEFAULT '[]',
-        "timestamp" TIMESTAMP NOT NULL DEFAULT NOW(),
-        "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
-        "updated_at" TIMESTAMP NOT NULL DEFAULT NOW(),
-        FOREIGN KEY ("user_id") REFERENCES "users" ("id")
-      )
-    `);
+            CREATE TABLE IF NOT EXISTS "mood_entries" (
+                                                          "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                                                          "user_id" UUID NOT NULL,
+                                                          "mood" INTEGER NOT NULL CHECK (mood >= 0 AND mood <= 10),
+                                                          "note" TEXT,
+                                                          "tags" JSONB NOT NULL DEFAULT '[]',
+                                                          "timestamp" TIMESTAMP NOT NULL DEFAULT NOW(),
+                                                          "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
+                                                          "updated_at" TIMESTAMP NOT NULL DEFAULT NOW(),
+                                                          FOREIGN KEY ("user_id") REFERENCES "users" ("id")
+            )
+        `);
 
         // Créer les index
         await db.execute(sql`
-      CREATE INDEX IF NOT EXISTS "user_timestamp_idx" ON "mood_entries" ("user_id", "timestamp")
-    `);
+            CREATE INDEX IF NOT EXISTS "user_timestamp_idx" ON "mood_entries" ("user_id", "timestamp")
+        `);
 
         await db.execute(sql`
-      CREATE INDEX IF NOT EXISTS "timestamp_idx" ON "mood_entries" ("timestamp")
-    `);
+            CREATE INDEX IF NOT EXISTS "timestamp_idx" ON "mood_entries" ("timestamp")
+        `);
 
         console.log('✅ Tables créées manuellement avec succès');
     } catch (error) {

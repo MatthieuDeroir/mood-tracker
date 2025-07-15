@@ -2,7 +2,6 @@
 import { db } from '../db/database.ts';
 import { moodEntries, users, MoodEntry, NewMoodEntry } from '../db/schema.ts';
 import { eq, and, gte, lte, like, desc, sql, avg, count, min, max } from 'drizzle-orm';
-import { randomUUID } from 'crypto';
 
 // Interface pour les statistiques
 export interface MoodStats {
@@ -31,7 +30,6 @@ export class MoodService {
     static async createMood(userId: string, mood: number, note?: string, tags: string[] = []): Promise<MoodEntry> {
         try {
             const newMood: NewMoodEntry = {
-                id: randomUUID(),
                 userId,
                 mood,
                 note,
@@ -193,43 +191,43 @@ export class MoodService {
         try {
             // Tendances par heure (avec PostgreSQL)
             const hourlyQuery = sql`
-        SELECT 
-          EXTRACT(HOUR FROM timestamp) as hour,
-          AVG(mood) as avg_mood,
-          COUNT(*) as count
-        FROM mood_entries 
-        WHERE user_id = ${userId} AND timestamp >= ${startDate}
-        GROUP BY EXTRACT(HOUR FROM timestamp)
-        ORDER BY hour
-      `;
+                SELECT
+                    EXTRACT(HOUR FROM timestamp) as hour,
+                    AVG(mood) as avg_mood,
+                    COUNT(*) as count
+                FROM mood_entries
+                WHERE user_id = ${userId} AND timestamp >= ${startDate}
+                GROUP BY EXTRACT(HOUR FROM timestamp)
+                ORDER BY hour
+            `;
 
             const hourlyTrends = await db.execute(hourlyQuery);
 
             // Tendances par jour de la semaine
             const weeklyQuery = sql`
-        SELECT 
-          EXTRACT(DOW FROM timestamp) as day_of_week,
-          AVG(mood) as avg_mood,
-          COUNT(*) as count
-        FROM mood_entries 
-        WHERE user_id = ${userId} AND timestamp >= ${startDate}
-        GROUP BY EXTRACT(DOW FROM timestamp)
-        ORDER BY day_of_week
-      `;
+                SELECT
+                    EXTRACT(DOW FROM timestamp) as day_of_week,
+                    AVG(mood) as avg_mood,
+                    COUNT(*) as count
+                FROM mood_entries
+                WHERE user_id = ${userId} AND timestamp >= ${startDate}
+                GROUP BY EXTRACT(DOW FROM timestamp)
+                ORDER BY day_of_week
+            `;
 
             const weeklyTrends = await db.execute(weeklyQuery);
 
             // Tendances par mois
             const monthlyQuery = sql`
-        SELECT 
-          EXTRACT(MONTH FROM timestamp) as month,
-          AVG(mood) as avg_mood,
-          COUNT(*) as count
-        FROM mood_entries 
-        WHERE user_id = ${userId} AND timestamp >= ${startDate}
-        GROUP BY EXTRACT(MONTH FROM timestamp)
-        ORDER BY month
-      `;
+                SELECT
+                    EXTRACT(MONTH FROM timestamp) as month,
+                    AVG(mood) as avg_mood,
+                    COUNT(*) as count
+                FROM mood_entries
+                WHERE user_id = ${userId} AND timestamp >= ${startDate}
+                GROUP BY EXTRACT(MONTH FROM timestamp)
+                ORDER BY month
+            `;
 
             const monthlyTrends = await db.execute(monthlyQuery);
 
@@ -273,45 +271,45 @@ export class MoodService {
             switch (period) {
                 case 'day':
                     groupByQuery = sql`
-            SELECT 
-              date_trunc('hour', timestamp) as period,
-              AVG(mood) as average_mood,
-              COUNT(*) as entry_count
-            FROM mood_entries 
-            WHERE user_id = ${userId} 
-              AND timestamp >= ${startDate} 
-              AND timestamp <= ${endDate}
-            GROUP BY date_trunc('hour', timestamp)
-            ORDER BY period
-          `;
+                        SELECT
+                            date_trunc('hour', timestamp) as period,
+                            AVG(mood) as average_mood,
+                            COUNT(*) as entry_count
+                        FROM mood_entries
+                        WHERE user_id = ${userId}
+                          AND timestamp >= ${startDate}
+                          AND timestamp <= ${endDate}
+                        GROUP BY date_trunc('hour', timestamp)
+                        ORDER BY period
+                    `;
                     break;
                 case 'week':
                     groupByQuery = sql`
-            SELECT 
-              date_trunc('day', timestamp) as period,
-              AVG(mood) as average_mood,
-              COUNT(*) as entry_count
-            FROM mood_entries 
-            WHERE user_id = ${userId} 
-              AND timestamp >= ${startDate} 
-              AND timestamp <= ${endDate}
-            GROUP BY date_trunc('day', timestamp)
-            ORDER BY period
-          `;
+                        SELECT
+                            date_trunc('day', timestamp) as period,
+                            AVG(mood) as average_mood,
+                            COUNT(*) as entry_count
+                        FROM mood_entries
+                        WHERE user_id = ${userId}
+                          AND timestamp >= ${startDate}
+                          AND timestamp <= ${endDate}
+                        GROUP BY date_trunc('day', timestamp)
+                        ORDER BY period
+                    `;
                     break;
                 case 'month':
                     groupByQuery = sql`
-            SELECT 
-              date_trunc('month', timestamp) as period,
-              AVG(mood) as average_mood,
-              COUNT(*) as entry_count
-            FROM mood_entries 
-            WHERE user_id = ${userId} 
-              AND timestamp >= ${startDate} 
-              AND timestamp <= ${endDate}
-            GROUP BY date_trunc('month', timestamp)
-            ORDER BY period
-          `;
+                        SELECT
+                            date_trunc('month', timestamp) as period,
+                            AVG(mood) as average_mood,
+                            COUNT(*) as entry_count
+                        FROM mood_entries
+                        WHERE user_id = ${userId}
+                          AND timestamp >= ${startDate}
+                          AND timestamp <= ${endDate}
+                        GROUP BY date_trunc('month', timestamp)
+                        ORDER BY period
+                    `;
                     break;
                 default:
                     throw new Error('Période non valide');

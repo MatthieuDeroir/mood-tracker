@@ -2,10 +2,9 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.ts';
-import { randomUUID } from 'crypto';
 
 // Récupérer l'URL de la base de données depuis les variables d'environnement
-const databaseUrl = Deno.env.get('DATABASE_URL');
+const databaseUrl = Deno.env.get('DATABASE_URL') || "postgres://postgres:78934797497@localhost:5432/mood-tracker";
 
 if (!databaseUrl) {
     console.error('❌ DATABASE_URL n\'est pas définie dans les variables d\'environnement');
@@ -46,22 +45,20 @@ export async function closeConnection(): Promise<void> {
 // Fonction pour assurer l'existence d'un utilisateur par défaut
 export async function ensureDefaultUser(): Promise<schema.User> {
     try {
-        const defaultUserId = 'user1';
+        // Rechercher l'utilisateur par email au lieu de l'ID
+        const existingUsers = await db.select().from(schema.users).where(
+            (users) => users.email.equals('user1@example.com')
+        );
 
-        // Rechercher l'utilisateur par email
-        const existingUser = await db.query.users.findFirst({
-            where: (users, { eq }) => eq(users.email, 'user1@example.com')
-        });
-
-        if (existingUser) {
+        if (existingUsers.length > 0) {
             console.log('👤 Utilisateur par défaut trouvé');
-            return existingUser;
+            return existingUsers[0];
         }
 
         // Créer l'utilisateur par défaut s'il n'existe pas
+        // Sans spécifier d'ID explicitement - PostgreSQL générera un UUID automatiquement
         const [newUser] = await db.insert(schema.users)
             .values({
-                id: defaultUserId, // Drizzle permet de définir un UUID spécifique
                 email: 'user1@example.com',
                 name: 'Default User',
                 settings: {
@@ -81,4 +78,3 @@ export async function ensureDefaultUser(): Promise<schema.User> {
         throw error;
     }
 }
-

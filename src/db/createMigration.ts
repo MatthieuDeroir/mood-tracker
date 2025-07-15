@@ -1,5 +1,4 @@
 // src/db/createMigration.ts
-import { writeFileSync, mkdirSync, existsSync } from "https://deno.land/std/fs/mod.ts";
 import { dirname } from "https://deno.land/std/path/mod.ts";
 
 // Nom du fichier basé sur l'horodatage
@@ -8,8 +7,12 @@ const migrationName = `${timestamp}_initial_schema.sql`;
 const migrationDir = "./drizzle";
 
 // Vérifier si le répertoire existe, sinon le créer
-if (!existsSync(migrationDir)) {
-    mkdirSync(migrationDir, { recursive: true });
+try {
+    await Deno.mkdir(migrationDir, { recursive: true });
+} catch (error) {
+    if (!(error instanceof Deno.errors.AlreadyExists)) {
+        throw error;
+    }
 }
 
 // Le contenu de la migration SQL
@@ -46,6 +49,6 @@ CREATE INDEX IF NOT EXISTS "timestamp_idx" ON "mood_entries" ("timestamp");
 
 // Écrire la migration dans un fichier
 const migrationPath = `${migrationDir}/${migrationName}`;
-writeFileSync(migrationPath, new TextEncoder().encode(migrationContent));
+await Deno.writeTextFile(migrationPath, migrationContent);
 
 console.log(`✅ Migration créée à ${migrationPath}`);

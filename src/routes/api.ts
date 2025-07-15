@@ -27,11 +27,12 @@ api.get('/health', async (c) => {
 // GET /api/moods - Liste des humeurs
 api.get('/moods', async (c) => {
     try {
-        const userId = 'user1'; // TODO: authentification plus tard
+        // Pour une approche simplifiée, nous récupérons d'abord l'utilisateur par défaut
+        const user = await ensureDefaultUser();
+        const userId = user.id; // Utilisation de l'ID généré automatiquement
+
         const startDate = c.req.query('start');
         const limit = parseInt(c.req.query('limit') || '100');
-
-        await ensureDefaultUser();
 
         let start: Date | undefined;
         if (startDate) {
@@ -51,14 +52,15 @@ api.get('/moods', async (c) => {
 api.post('/moods', async (c) => {
     try {
         const { mood, note, tags } = await c.req.json();
-        const userId = 'user1'; // TODO: authentification plus tard
+
+        // Récupérer l'utilisateur par défaut
+        const user = await ensureDefaultUser();
+        const userId = user.id;
 
         // Validation
         if (typeof mood !== 'number' || mood < 0 || mood > 10) {
             return c.json({ error: 'L\'humeur doit être un nombre entre 0 et 10' }, 400);
         }
-
-        await ensureDefaultUser();
 
         const moodEntry = await MoodService.createMood(userId, mood, note, tags || []);
 
@@ -77,7 +79,9 @@ api.post('/moods', async (c) => {
 // PUT /api/moods/:id - Mettre à jour une humeur
 api.put('/moods/:id', async (c) => {
     try {
-        const userId = 'user1';
+        const user = await ensureDefaultUser();
+        const userId = user.id;
+
         const moodId = c.req.param('id');
         const { mood, note, tags } = await c.req.json();
 
@@ -111,7 +115,9 @@ api.put('/moods/:id', async (c) => {
 // DELETE /api/moods/:id - Supprimer une humeur
 api.delete('/moods/:id', async (c) => {
     try {
-        const userId = 'user1';
+        const user = await ensureDefaultUser();
+        const userId = user.id;
+
         const moodId = c.req.param('id');
 
         const success = await MoodService.deleteMood(moodId, userId);
@@ -133,10 +139,10 @@ api.delete('/moods/:id', async (c) => {
 // GET /api/analytics - Statistiques
 api.get('/analytics', async (c) => {
     try {
-        const userId = 'user1';
-        const days = parseInt(c.req.query('days') || '7');
+        const user = await ensureDefaultUser();
+        const userId = user.id;
 
-        await ensureDefaultUser();
+        const days = parseInt(c.req.query('days') || '7');
 
         const stats = await MoodService.getMoodStats(userId, days);
 
@@ -150,12 +156,12 @@ api.get('/analytics', async (c) => {
 // GET /api/timeline - Données pour graphiques
 api.get('/timeline', async (c) => {
     try {
-        const userId = 'user1';
+        const user = await ensureDefaultUser();
+        const userId = user.id;
+
         const period = c.req.query('period') as 'day' | 'week' | 'month' || 'week';
         const startDate = new Date(c.req.query('start') || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
         const endDate = new Date(c.req.query('end') || new Date());
-
-        await ensureDefaultUser();
 
         const timelineData = await MoodService.getTimelineData(userId, period, startDate, endDate);
 
@@ -169,15 +175,15 @@ api.get('/timeline', async (c) => {
 // GET /api/search - Recherche dans les notes
 api.get('/search', async (c) => {
     try {
-        const userId = 'user1';
+        const user = await ensureDefaultUser();
+        const userId = user.id;
+
         const query = c.req.query('q') || '';
         const limit = parseInt(c.req.query('limit') || '50');
 
         if (!query.trim()) {
             return c.json({ error: 'Une requête de recherche est nécessaire' }, 400);
         }
-
-        await ensureDefaultUser();
 
         const results = await MoodService.searchMoods(userId, query, limit);
 
@@ -195,14 +201,18 @@ api.get('/search', async (c) => {
 // GET /api/debug - Info de débogage
 api.get('/debug', async (c) => {
     try {
-        const userId = 'user1';
-
-        await ensureDefaultUser();
+        const user = await ensureDefaultUser();
+        const userId = user.id;
 
         const recentMoods = await MoodService.getUserMoods(userId, undefined, undefined, 5);
         const stats = await MoodService.getMoodStats(userId, 7);
 
         return c.json({
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name
+            },
             recentMoods,
             stats,
             timestamp: new Date().toISOString(),

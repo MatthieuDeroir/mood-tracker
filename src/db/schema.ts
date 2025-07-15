@@ -44,7 +44,7 @@ export const users = pgTable('users', {
 export const moodEntries = pgTable('mood_entries', {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id').notNull().references(() => users.id),
-    mood: integer('mood').notNull().check('mood >= 0 AND mood <= 10'),
+    mood: integer('mood').notNull(), // La contrainte check sera ajoutée dans les migrations
     note: text('note'),
     tags: jsonb('tags').$type<string[]>().notNull().default([]),
     timestamp: timestamp('timestamp').defaultNow().notNull(),
