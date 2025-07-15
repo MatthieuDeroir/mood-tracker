@@ -1,34 +1,11 @@
-// src/routes/api.ts - Version Sequelize
+// src/routes/api.ts - Version Drizzle
 import { Hono } from 'hono';
 import MoodService from '../services/moodService.ts';
-import { User } from '../models/index.ts';
+import { ensureDefaultUser } from '../db/database.ts';
 
 const api = new Hono();
 
-// Middleware pour créer un utilisateur par défaut si nécessaire
-async function ensureUser(userId: string) {
-    let user = await User.findByPk(userId);
-
-    if (!user) {
-        user = await User.create({
-            id: userId,
-            email: `${userId}@example.com`,
-            name: 'Default User',
-            settings: {
-                timezone: 'Europe/Paris',
-                moodLabels: {
-                    0: 'Terrible', 1: 'Très mal', 2: 'Mal', 3: 'Pas bien', 4: 'Faible',
-                    5: 'Neutre', 6: 'Correct', 7: 'Bien', 8: 'Très bien', 9: 'Super', 10: 'Incroyable'
-                }
-            }
-        });
-        console.log(`👤 User created: ${userId}`);
-    }
-
-    return user;
-}
-
-// GET /api/health - Health check
+// GET /api/health - Vérification d'état
 api.get('/health', async (c) => {
     try {
         const totalMoods = await MoodService.getUserMoods('user1');
@@ -36,7 +13,7 @@ api.get('/health', async (c) => {
         return c.json({
             status: 'ok',
             timestamp: new Date().toISOString(),
-            database: 'sequelize + sqlite3',
+            database: 'drizzle + postgresql',
             totalMoods: totalMoods.length
         });
     } catch (error) {
@@ -47,14 +24,14 @@ api.get('/health', async (c) => {
     }
 });
 
-// GET /api/moods - Liste des moods
+// GET /api/moods - Liste des humeurs
 api.get('/moods', async (c) => {
     try {
-        const userId = 'user1'; // TODO: auth plus tard
+        const userId = 'user1'; // TODO: authentification plus tard
         const startDate = c.req.query('start');
         const limit = parseInt(c.req.query('limit') || '100');
 
-        await ensureUser(userId);
+        await ensureDefaultUser();
 
         let start: Date | undefined;
         if (startDate) {
@@ -65,23 +42,23 @@ api.get('/moods', async (c) => {
 
         return c.json(moods);
     } catch (error) {
-        console.error('Error fetching moods:', error);
-        return c.json({ error: 'Failed to fetch moods' }, 500);
+        console.error('Erreur lors de la récupération des humeurs:', error);
+        return c.json({ error: 'Échec de la récupération des humeurs' }, 500);
     }
 });
 
-// POST /api/moods - Créer un mood
+// POST /api/moods - Créer une humeur
 api.post('/moods', async (c) => {
     try {
         const { mood, note, tags } = await c.req.json();
-        const userId = 'user1'; // TODO: auth plus tard
+        const userId = 'user1'; // TODO: authentification plus tard
 
         // Validation
         if (typeof mood !== 'number' || mood < 0 || mood > 10) {
-            return c.json({ error: 'Mood must be a number between 0 and 10' }, 400);
+            return c.json({ error: 'L\'humeur doit être un nombre entre 0 et 10' }, 400);
         }
 
-        await ensureUser(userId);
+        await ensureDefaultUser();
 
         const moodEntry = await MoodService.createMood(userId, mood, note, tags || []);
 
@@ -89,15 +66,15 @@ api.post('/moods', async (c) => {
             success: true,
             id: moodEntry.id,
             mood: moodEntry,
-            message: 'Mood created successfully'
+            message: 'Humeur créée avec succès'
         });
     } catch (error) {
-        console.error('Error creating mood:', error);
-        return c.json({ error: 'Failed to create mood' }, 500);
+        console.error('Erreur lors de la création de l\'humeur:', error);
+        return c.json({ error: 'Échec de la création de l\'humeur' }, 500);
     }
 });
 
-// PUT /api/moods/:id - Mettre à jour un mood
+// PUT /api/moods/:id - Mettre à jour une humeur
 api.put('/moods/:id', async (c) => {
     try {
         const userId = 'user1';
@@ -106,7 +83,7 @@ api.put('/moods/:id', async (c) => {
 
         // Validation
         if (mood !== undefined && (typeof mood !== 'number' || mood < 0 || mood > 10)) {
-            return c.json({ error: 'Mood must be a number between 0 and 10' }, 400);
+            return c.json({ error: 'L\'humeur doit être un nombre entre 0 et 10' }, 400);
         }
 
         const updates: any = {};
@@ -117,21 +94,21 @@ api.put('/moods/:id', async (c) => {
         const updatedMood = await MoodService.updateMood(moodId, userId, updates);
 
         if (!updatedMood) {
-            return c.json({ error: 'Mood not found' }, 404);
+            return c.json({ error: 'Humeur non trouvée' }, 404);
         }
 
         return c.json({
             success: true,
             mood: updatedMood,
-            message: 'Mood updated successfully'
+            message: 'Humeur mise à jour avec succès'
         });
     } catch (error) {
-        console.error('Error updating mood:', error);
-        return c.json({ error: 'Failed to update mood' }, 500);
+        console.error('Erreur lors de la mise à jour de l\'humeur:', error);
+        return c.json({ error: 'Échec de la mise à jour de l\'humeur' }, 500);
     }
 });
 
-// DELETE /api/moods/:id - Supprimer un mood
+// DELETE /api/moods/:id - Supprimer une humeur
 api.delete('/moods/:id', async (c) => {
     try {
         const userId = 'user1';
@@ -140,16 +117,16 @@ api.delete('/moods/:id', async (c) => {
         const success = await MoodService.deleteMood(moodId, userId);
 
         if (!success) {
-            return c.json({ error: 'Mood not found' }, 404);
+            return c.json({ error: 'Humeur non trouvée' }, 404);
         }
 
         return c.json({
             success: true,
-            message: 'Mood deleted successfully'
+            message: 'Humeur supprimée avec succès'
         });
     } catch (error) {
-        console.error('Error deleting mood:', error);
-        return c.json({ error: 'Failed to delete mood' }, 500);
+        console.error('Erreur lors de la suppression de l\'humeur:', error);
+        return c.json({ error: 'Échec de la suppression de l\'humeur' }, 500);
     }
 });
 
@@ -159,14 +136,14 @@ api.get('/analytics', async (c) => {
         const userId = 'user1';
         const days = parseInt(c.req.query('days') || '7');
 
-        await ensureUser(userId);
+        await ensureDefaultUser();
 
         const stats = await MoodService.getMoodStats(userId, days);
 
         return c.json(stats);
     } catch (error) {
-        console.error('Error fetching analytics:', error);
-        return c.json({ error: 'Failed to fetch analytics' }, 500);
+        console.error('Erreur lors de la récupération des analyses:', error);
+        return c.json({ error: 'Échec de la récupération des analyses' }, 500);
     }
 });
 
@@ -178,14 +155,14 @@ api.get('/timeline', async (c) => {
         const startDate = new Date(c.req.query('start') || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
         const endDate = new Date(c.req.query('end') || new Date());
 
-        await ensureUser(userId);
+        await ensureDefaultUser();
 
         const timelineData = await MoodService.getTimelineData(userId, period, startDate, endDate);
 
         return c.json(timelineData);
     } catch (error) {
-        console.error('Error fetching timeline:', error);
-        return c.json({ error: 'Failed to fetch timeline' }, 500);
+        console.error('Erreur lors de la récupération de la timeline:', error);
+        return c.json({ error: 'Échec de la récupération de la timeline' }, 500);
     }
 });
 
@@ -197,10 +174,10 @@ api.get('/search', async (c) => {
         const limit = parseInt(c.req.query('limit') || '50');
 
         if (!query.trim()) {
-            return c.json({ error: 'Search query is required' }, 400);
+            return c.json({ error: 'Une requête de recherche est nécessaire' }, 400);
         }
 
-        await ensureUser(userId);
+        await ensureDefaultUser();
 
         const results = await MoodService.searchMoods(userId, query, limit);
 
@@ -210,17 +187,17 @@ api.get('/search', async (c) => {
             count: results.length
         });
     } catch (error) {
-        console.error('Error searching moods:', error);
-        return c.json({ error: 'Failed to search moods' }, 500);
+        console.error('Erreur lors de la recherche des humeurs:', error);
+        return c.json({ error: 'Échec de la recherche des humeurs' }, 500);
     }
 });
 
-// GET /api/debug - Debug info
+// GET /api/debug - Info de débogage
 api.get('/debug', async (c) => {
     try {
         const userId = 'user1';
 
-        await ensureUser(userId);
+        await ensureDefaultUser();
 
         const recentMoods = await MoodService.getUserMoods(userId, undefined, undefined, 5);
         const stats = await MoodService.getMoodStats(userId, 7);
@@ -229,11 +206,11 @@ api.get('/debug', async (c) => {
             recentMoods,
             stats,
             timestamp: new Date().toISOString(),
-            database: 'sequelize + sqlite3'
+            database: 'drizzle + postgresql'
         });
     } catch (error) {
-        console.error('Error getting debug info:', error);
-        return c.json({ error: 'Failed to get debug info' }, 500);
+        console.error('Erreur lors de la récupération des infos de débogage:', error);
+        return c.json({ error: 'Échec de la récupération des infos de débogage' }, 500);
     }
 });
 

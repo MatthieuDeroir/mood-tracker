@@ -1,4 +1,4 @@
-// main.ts - Version Sequelize
+// main.ts - Version Drizzle
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/middleware';
 import { logger } from 'hono/middleware';
@@ -6,10 +6,7 @@ import { cors } from 'hono/middleware';
 
 import { apiRoutes } from './src/routes/api.ts';
 import { pageRoutes } from './src/routes/pages.ts';
-import { initDatabase, closeDatabase } from './src/db/database.ts';
-
-// Import des modèles pour s'assurer qu'ils sont initialisés
-import './src/models/index.ts';
+import { testConnection, closeConnection } from './src/db/database.ts';
 
 const app = new Hono();
 
@@ -17,53 +14,53 @@ const app = new Hono();
 app.use('*', logger());
 app.use('*', cors());
 
-// Static files (CSS, JS, images)
+// Fichiers statiques (CSS, JS, images)
 app.use('/static/*', serveStatic({ root: './' }));
 
-// API routes
+// Routes API
 app.route('/api', apiRoutes);
 
-// Page routes (HTML)
+// Routes des pages (HTML)
 app.route('/', pageRoutes);
 
-// Initialize Sequelize database
-console.log('🔧 Initializing Sequelize database...');
+// Initialiser la base de données Drizzle
+console.log('🔧 Initialisation de la base de données Drizzle...');
 try {
-    await initDatabase();
-    console.log('✅ Database ready!');
+    await testConnection();
+    console.log('✅ Base de données prête!');
 } catch (error) {
-    console.error('❌ Database initialization failed:', error);
-    console.log('🔄 Exiting...');
+    console.error('❌ Échec de l\'initialisation de la base de données:', error);
+    console.log('🔄 Sortie...');
     Deno.exit(1);
 }
 
-// Graceful shutdown
+// Arrêt gracieux
 function gracefulShutdown() {
-    console.log('🔄 Shutting down gracefully...');
-    closeDatabase().then(() => {
-        console.log('👋 Goodbye!');
+    console.log('🔄 Arrêt gracieux...');
+    closeConnection().then(() => {
+        console.log('👋 Au revoir!');
         Deno.exit(0);
     }).catch((error) => {
-        console.error('❌ Error during shutdown:', error);
+        console.error('❌ Erreur lors de l\'arrêt:', error);
         Deno.exit(1);
     });
 }
 
-// Handle shutdown signals
+// Gérer les signaux d'arrêt
 Deno.addSignalListener('SIGINT', gracefulShutdown);
 Deno.addSignalListener('SIGTERM', gracefulShutdown);
 
-// Start server
+// Démarrer le serveur
 const port = 3000;
-console.log(`🚀 Server running at http://localhost:${port}`);
-console.log(`📊 Open http://localhost:${port} to start tracking your mood!`);
-console.log(`🔍 Debug: http://localhost:${port}/api/debug`);
-console.log(`❤️  Health: http://localhost:${port}/api/health`);
-console.log(`🔧 Database: SQLite3 + Sequelize`);
+console.log(`🚀 Serveur démarré sur http://localhost:${port}`);
+console.log(`📊 Ouvrez http://localhost:${port} pour commencer à suivre votre humeur!`);
+console.log(`🔍 Débogage: http://localhost:${port}/api/debug`);
+console.log(`❤️  Santé: http://localhost:${port}/api/health`);
+console.log(`🔧 Base de données: PostgreSQL + Drizzle`);
 
 try {
     await Deno.serve({ port }, app.fetch);
 } catch (error) {
-    console.error('❌ Server failed to start:', error);
+    console.error('❌ Échec du démarrage du serveur:', error);
     await gracefulShutdown();
 }

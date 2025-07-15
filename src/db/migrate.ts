@@ -1,106 +1,67 @@
-// src/db/migrate.ts - Script de migration
-import { sequelize } from './database.ts';
-import { User, MoodEntry } from '../models/index.ts';
+// src/db/migrate.ts - Script de migration Drizzle
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { db, testConnection, ensureDefaultUser } from './database.ts';
 
-async function migrate() {
+async function runMigration() {
     try {
-        console.log('🔧 Starting database migration...');
+        console.log('🔧 Démarrage de la migration de la base de données...');
 
-        // Tester la connexion
-        await sequelize.authenticate();
-        console.log('✅ Database connection established');
+        // Tester la connexion à la base de données
+        await testConnection();
 
-        // Synchroniser les modèles (créer les tables)
-        await sequelize.sync({ force: false, alter: true });
-        console.log('✅ Database schema synchronized');
+        // Exécuter les migrations
+        console.log('📦 Exécution des migrations...');
+        await migrate(db, { migrationsFolder: './drizzle' });
+        console.log('✅ Migrations terminées avec succès');
 
-        // Créer un utilisateur par défaut si nécessaire
-        const defaultUser = await User.findOrCreate({
-            where: { email: 'user1@example.com' },
-            defaults: {
-                id: 'user1',
-                email: 'user1@example.com',
-                name: 'Default User',
-                settings: {
-                    timezone: 'Europe/Paris',
-                    moodLabels: {
-                        0: 'Terrible', 1: 'Très mal', 2: 'Mal', 3: 'Pas bien', 4: 'Faible',
-                        5: 'Neutre', 6: 'Correct', 7: 'Bien', 8: 'Très bien', 9: 'Super', 10: 'Incroyable'
-                    }
-                }
-            }
-        });
+        // Créer un utilisateur par défaut
+        await ensureDefaultUser();
 
-        if (defaultUser[1]) {
-            console.log('👤 Default user created');
-        } else {
-            console.log('👤 Default user already exists');
-        }
+        // Récupérer des statistiques de la base de données
+        const userCount = await db.query.users.count();
+        const moodCount = await db.query.moodEntries.count();
 
-        // Afficher les statistiques
-        const userCount = await User.count();
-        const moodCount = await MoodEntry.count();
+        console.log(`📊 Statistiques de la base de données:`);
+        console.log(`   - Utilisateurs: ${userCount}`);
+        console.log(`   - Entrées d'humeur: ${moodCount}`);
 
-        console.log(`📊 Database statistics:`);
-        console.log(`   - Users: ${userCount}`);
-        console.log(`   - Mood entries: ${moodCount}`);
+        // Afficher la version PostgreSQL
+        const versionResult = await db.execute(sql`SELECT version()`);
+        console.log(`📦 Version PostgreSQL: ${versionResult.rows[0].version}`);
 
-        // Afficher la version SQLite
-        const result = await sequelize.query('SELECT sqlite_version() as version');
-        console.log(`📦 SQLite version: ${(result[0] as any)[0].version}`);
-
-        console.log('✅ Migration completed successfully!');
+        console.log('✅ Migration terminée avec succès!');
 
     } catch (error) {
-        console.error('❌ Migration failed:', error);
+        console.error('❌ Échec de la migration:', error);
         throw error;
-    } finally {
-        await sequelize.close();
     }
 }
 
-// Fonction pour reset la base de données
+// Fonction pour réinitialiser la base de données
 async function resetDatabase() {
     try {
-        console.log('🔄 Resetting database...');
+        console.log('🔄 Réinitialisation de la base de données...');
 
-        await sequelize.authenticate();
-        await sequelize.sync({ force: true });
+        // Supprimer toutes les entrées
+        await db.delete(schema.moodEntries);
+        await db.delete(schema.users);
 
-        console.log('✅ Database reset completed!');
+        console.log('✅ Réinitialisation terminée!');
     } catch (error) {
-        console.error('❌ Database reset failed:', error);
+        console.error('❌ Échec de la réinitialisation de la base de données:', error);
         throw error;
-    } finally {
-        await sequelize.close();
     }
 }
 
-// Fonction pour seed avec des données de test
+// Fonction pour peupler la base de données avec des données de test
 async function seedDatabase() {
     try {
-        console.log('🌱 Seeding database...');
-
-        await sequelize.authenticate();
+        console.log('🌱 Peuplement de la base de données...');
 
         // Créer l'utilisateur par défaut
-        const user = await User.findOrCreate({
-            where: { email: 'user1@example.com' },
-            defaults: {
-                id: 'user1',
-                email: 'user1@example.com',
-                name: 'Default User',
-                settings: {
-                    timezone: 'Europe/Paris',
-                    moodLabels: {
-                        0: 'Terrible', 1: 'Très mal', 2: 'Mal', 3: 'Pas bien', 4: 'Faible',
-                        5: 'Neutre', 6: 'Correct', 7: 'Bien', 8: 'Très bien', 9: 'Super', 10: 'Incroyable'
-                    }
-                }
-            }
-        });
+        const user = await ensureDefaultUser();
 
-        // Créer quelques moods de test
+        // Créer quelques humeurs de test
         const testMoods = [
             { mood: 7, note: 'Bonne journée au travail', tags: ['work', 'productive'] },
             { mood: 5, note: 'Journée normale', tags: ['routine'] },
@@ -110,32 +71,34 @@ async function seedDatabase() {
         ];
 
         for (const moodData of testMoods) {
-            await MoodEntry.create({
-                user_id: 'user1',
+            // Calculer un timestamp aléatoire dans les 7 derniers jours
+            const randomDate = new Date();
+            randomDate.setDate(randomDate.getDate() - Math.floor(Math.random() * 7));
+
+            await db.insert(schema.moodEntries).values({
+                userId: user.id,
                 mood: moodData.mood,
                 note: moodData.note,
                 tags: moodData.tags,
-                timestamp: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000), // Random dans les 7 derniers jours
+                timestamp: randomDate
             });
         }
 
-        console.log(`✅ Database seeded with ${testMoods.length} test moods`);
+        console.log(`✅ Base de données peuplée avec ${testMoods.length} humeurs de test`);
 
     } catch (error) {
-        console.error('❌ Database seeding failed:', error);
+        console.error('❌ Échec du peuplement de la base de données:', error);
         throw error;
-    } finally {
-        await sequelize.close();
     }
 }
 
-// CLI interface
+// Interface CLI
 if (import.meta.main) {
     const command = Deno.args[0] || 'migrate';
 
     switch (command) {
         case 'migrate':
-            await migrate();
+            await runMigration();
             break;
         case 'reset':
             await resetDatabase();
@@ -148,7 +111,7 @@ if (import.meta.main) {
             await seedDatabase();
             break;
         default:
-            console.log('Usage: deno run migrate.ts [migrate|reset|seed|reset-and-seed]');
+            console.log('Usage: deno run --allow-net --allow-read --allow-env src/db/migrate.ts [migrate|reset|seed|reset-and-seed]');
             break;
     }
 }
