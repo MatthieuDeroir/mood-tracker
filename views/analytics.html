@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - Mood Tracker</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>📈 Analytics</h1>
+        <nav>
+            <a href="/">Dashboard</a>
+            <a href="/analytics" class="active">Analytics</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="analytics-controls">
+            <div class="period-selector">
+                <button class="period-btn active" data-period="week">Cette semaine</button>
+                <button class="period-btn" data-period="month">Ce mois</button>
+                <button class="period-btn" data-period="year">Cette année</button>
+            </div>
+        </section>
+
+        <section class="analytics-overview">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Moyenne</h3>
+                    <span class="stat-big" id="overallAvg">-</span>
+                </div>
+                <div class="stat-card">
+                    <h3>Total entrées</h3>
+                    <span class="stat-big" id="totalCount">-</span>
+                </div>
+                <div class="stat-card">
+                    <h3>Meilleur mood</h3>
+                    <span class="stat-big" id="bestMood">-</span>
+                </div>
+                <div class="stat-card">
+                    <h3>Pire mood</h3>
+                    <span class="stat-big" id="worstMood">-</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="chart-container">
+            <h2>Évolution du mood</h2>
+            <canvas id="moodChart" width="400" height="200"></canvas>
+        </section>
+
+        <section class="patterns">
+            <h2>Patterns détectés</h2>
+            <div id="patternsList">
+                <div class="loading">Analyse en cours...</div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script src="/static/js/analytics.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "dev": "deno run --allow-net --allow-read --allow-write --allow-ffi --allow-env --watch main.ts",
+    "start": "deno run --allow-net --allow-read --allow-write --allow-ffi --allow-env main.ts"
+  },
+  "imports": {
+    "@types/pg": "npm:@types/pg@^8.15.4",
+    "drizzle-kit": "npm:drizzle-kit@^0.31.4",
+    "drizzle-orm": "npm:drizzle-orm@^0.44.3",
+    "hono": "https://deno.land/x/hono@v3.12.0/mod.ts",
+    "hono/middleware": "https://deno.land/x/hono@v3.12.0/middleware.ts",
+    "pg": "npm:pg@^8.16.3"
+  }
+
+}

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mood Tracker</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>📊 Mood Tracker</h1>
+        <nav>
+            <a href="/">Dashboard</a>
+            <a href="/analytics">Analytics</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="mood-input">
+            <h2>Comment tu te sens maintenant ?</h2>
+
+            <div class="mood-slider">
+                <input type="range" id="moodRange" min="0" max="10" value="5">
+                <div class="mood-display">
+                    <span id="moodEmoji">😐</span>
+                    <span id="moodText">Neutre</span>
+                    <span id="moodValue">5/10</span>
+                </div>
+            </div>
+
+            <textarea id="moodNote" placeholder="Raconte-moi ce qui se passe... (optionnel)" rows="3"></textarea>
+
+            <div class="tags">
+                <span class="tag" data-tag="work">💼 Travail</span>
+                <span class="tag" data-tag="family">👨‍👩‍👧‍👦 Famille</span>
+                <span class="tag" data-tag="health">🏥 Santé</span>
+                <span class="tag" data-tag="friends">👥 Amis</span>
+                <span class="tag" data-tag="exercise">🏃‍♂️ Sport</span>
+                <span class="tag" data-tag="food">🍕 Nourriture</span>
+            </div>
+
+            <button id="saveMood">Sauvegarder</button>
+        </section>
+
+        <section class="today-moods">
+            <h2>Aujourd'hui</h2>
+            <div id="moodsList">
+                <div class="loading">Chargement...</div>
+            </div>
+        </section>
+
+        <section class="quick-stats">
+            <div class="stat">
+                <span class="stat-label">Moyenne aujourd'hui</span>
+                <span class="stat-value" id="todayAvg">-</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Entrées</span>
+                <span class="stat-value" id="todayCount">0</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Mood actuel</span>
+                <span class="stat-value" id="currentMood">😐</span>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
