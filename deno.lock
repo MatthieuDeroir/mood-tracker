@@ -2,6 +2,7 @@
   "version": "4",
   "specifiers": {
     "npm:drizzle-orm@0.29": "0.29.5_postgres@3.4.7",
+    "npm:drizzle-orm@0.29.5": "0.29.5_postgres@3.4.7",
     "npm:postgres@^3.4.0": "3.4.7",
     "npm:sqlite@5.1.1": "5.1.1"
   },

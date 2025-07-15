@@ -2,6 +2,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.ts';
+import {eq} from "npm:drizzle-orm@0.29.5";
 
 // Récupérer l'URL de la base de données depuis les variables d'environnement
 const databaseUrl = Deno.env.get('DATABASE_URL') || "postgres://postgres:78934797497@localhost:5432/mood-tracker";
@@ -47,8 +48,8 @@ export async function ensureDefaultUser(): Promise<schema.User> {
     try {
         // Rechercher l'utilisateur par email au lieu de l'ID
         const existingUsers = await db.select().from(schema.users).where(
-            (users) => users.email.equals('user1@example.com')
-        );
+            eq(schema.users.email, 'user1@example.com')
+        )
 
         if (existingUsers.length > 0) {
             console.log('👤 Utilisateur par défaut trouvé');
