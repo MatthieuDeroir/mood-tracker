@@ -1,15 +1,12 @@
 // src/models/types.ts
-import { MoodEntry as DbMoodEntry, User as DbUser } from '../db/schema.ts';
+import type { User as DbUser, MoodEntry as DbMoodEntry } from '../db/schema.ts';
 
-// Type MoodEntry pour l'API
-export interface MoodEntry extends DbMoodEntry {
-    // Extensions ou propriétés supplémentaires si nécessaire
-}
+// Types pour l'API
+export type User = DbUser;
+export type MoodEntry = DbMoodEntry;
 
-// Type User pour l'API
-export interface User extends DbUser {
-    // Extensions ou propriétés supplémentaires si nécessaire
-}
+// Langues supportées
+export type SupportedLanguage = 'fr' | 'en' | 'es' | 'de';
 
 // Statistiques d'humeur
 export interface MoodStats {
@@ -52,16 +49,3 @@ export interface UpdateMoodRequest {
     note?: string;
     tags?: string[];
 }
-
-// Traductions pour l'interface
-export interface Translations {
-    moodLabels: {
-        [key: number]: string;
-    };
-    interface: {
-        [key: string]: string;
-    };
-}
-
-// Format pour les paramètres de langue
-export type SupportedLanguage = 'fr' | 'en' | 'es' | 'de';

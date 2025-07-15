@@ -1,6 +1,8 @@
 // src/db/migrate.ts - Script de migration Drizzle
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { db, testConnection, ensureDefaultUser } from './database.ts';
+import { sql } from 'drizzle-orm';
+import * as schema from './schema.ts';
 
 async function runMigration() {
     try {
@@ -9,21 +11,29 @@ async function runMigration() {
         // Tester la connexion à la base de données
         await testConnection();
 
-        // Exécuter les migrations
-        console.log('📦 Exécution des migrations...');
-        await migrate(db, { migrationsFolder: './drizzle' });
-        console.log('✅ Migrations terminées avec succès');
+        // Option 1: Utiliser les migrations Drizzle
+        try {
+            console.log('📦 Exécution des migrations depuis le dossier drizzle/...');
+            await migrate(db, { migrationsFolder: './drizzle' });
+            console.log('✅ Migrations terminées avec succès');
+        } catch (error) {
+            console.error('⚠️ Erreur avec les migrations Drizzle:', error.message);
+            console.log('⚠️ Tentative d\'exécution manuelle du schéma SQL...');
+
+            // Option 2: Exécuter manuellement le schéma SQL si les migrations échouent
+            await createTablesManually();
+        }
 
         // Créer un utilisateur par défaut
         await ensureDefaultUser();
 
         // Récupérer des statistiques de la base de données
-        const userCount = await db.query.users.count();
-        const moodCount = await db.query.moodEntries.count();
+        const userCount = await db.select({ count: sql`count(*)` }).from(schema.users);
+        const moodCount = await db.select({ count: sql`count(*)` }).from(schema.moodEntries);
 
         console.log(`📊 Statistiques de la base de données:`);
-        console.log(`   - Utilisateurs: ${userCount}`);
-        console.log(`   - Entrées d'humeur: ${moodCount}`);
+        console.log(`   - Utilisateurs: ${userCount[0]?.count || 0}`);
+        console.log(`   - Entrées d'humeur: ${moodCount[0]?.count || 0}`);
 
         // Afficher la version PostgreSQL
         const versionResult = await db.execute(sql`SELECT version()`);
@@ -33,6 +43,55 @@ async function runMigration() {
 
     } catch (error) {
         console.error('❌ Échec de la migration:', error);
+        throw error;
+    }
+}
+
+// Fonction pour créer les tables manuellement si les migrations échouent
+async function createTablesManually() {
+    try {
+        // Créer l'extension uuid-ossp si elle n'existe pas
+        await db.execute(sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+
+        // Créer la table des utilisateurs
+        await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "users" (
+        "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        "email" VARCHAR(255) NOT NULL UNIQUE,
+        "name" VARCHAR(255) NOT NULL,
+        "settings" JSONB NOT NULL DEFAULT '{"timezone":"Europe/Paris","moodLabels":{"0":"Terrible","1":"Très mal","2":"Mal","3":"Pas bien","4":"Faible","5":"Neutre","6":"Correct","7":"Bien","8":"Très bien","9":"Super","10":"Incroyable"}}',
+        "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "updated_at" TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+        // Créer la table des entrées d'humeur
+        await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "mood_entries" (
+        "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        "user_id" UUID NOT NULL,
+        "mood" INTEGER NOT NULL CHECK (mood >= 0 AND mood <= 10),
+        "note" TEXT,
+        "tags" JSONB NOT NULL DEFAULT '[]',
+        "timestamp" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "updated_at" TIMESTAMP NOT NULL DEFAULT NOW(),
+        FOREIGN KEY ("user_id") REFERENCES "users" ("id")
+      )
+    `);
+
+        // Créer les index
+        await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "user_timestamp_idx" ON "mood_entries" ("user_id", "timestamp")
+    `);
+
+        await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "timestamp_idx" ON "mood_entries" ("timestamp")
+    `);
+
+        console.log('✅ Tables créées manuellement avec succès');
+    } catch (error) {
+        console.error('❌ Échec de la création manuelle des tables:', error);
         throw error;
     }
 }
@@ -111,7 +170,7 @@ if (import.meta.main) {
             await seedDatabase();
             break;
         default:
-            console.log('Usage: deno run --allow-net --allow-read --allow-env src/db/migrate.ts [migrate|reset|seed|reset-and-seed]');
+            console.log('Usage: deno run --allow-net --allow-read --allow-write --allow-env src/db/migrate.ts [migrate|reset|seed|reset-and-seed]');
             break;
     }
 }

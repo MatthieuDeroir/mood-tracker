@@ -2,6 +2,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.ts';
+import { randomUUID } from 'crypto';
 
 // Récupérer l'URL de la base de données depuis les variables d'environnement
 const databaseUrl = Deno.env.get('DATABASE_URL');
@@ -12,7 +13,7 @@ if (!databaseUrl) {
 }
 
 // Initialiser le client PostgreSQL
-const client = postgres(databaseUrl);
+const client = postgres(databaseUrl, { max: 10 });
 
 // Initialiser Drizzle avec le client et le schéma
 export const db = drizzle(client, { schema });
@@ -80,3 +81,4 @@ export async function ensureDefaultUser(): Promise<schema.User> {
         throw error;
     }
 }
+

@@ -6,8 +6,7 @@ import {
     text,
     timestamp,
     integer,
-    json,
-    foreignKey,
+    jsonb,
     index
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
@@ -17,11 +16,12 @@ export const users = pgTable('users', {
     id: uuid('id').primaryKey().defaultRandom(),
     email: varchar('email', { length: 255 }).notNull().unique(),
     name: varchar('name', { length: 255 }).notNull(),
-    settings: json('settings').$type<{
+    settings: jsonb('settings').$type<{
         timezone: string;
         moodLabels: Record<number, string>;
+        language?: string;
     }>().notNull().default({
-        timezone: 'UTC',
+        timezone: 'Europe/Paris',
         moodLabels: {
             0: 'Terrible',
             1: 'Très mal',
@@ -46,7 +46,7 @@ export const moodEntries = pgTable('mood_entries', {
     userId: uuid('user_id').notNull().references(() => users.id),
     mood: integer('mood').notNull().check('mood >= 0 AND mood <= 10'),
     note: text('note'),
-    tags: json('tags').$type<string[]>().notNull().default([]),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
     timestamp: timestamp('timestamp').defaultNow().notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull()
