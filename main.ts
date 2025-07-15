@@ -6,7 +6,10 @@ import { cors } from 'hono/middleware';
 
 import { apiRoutes } from './src/routes/api.ts';
 import { pageRoutes } from './src/routes/pages.ts';
+import { importApi } from './src/routes/api-import.ts';
 import { testConnection, closeConnection } from './src/db/database.ts';
+
+// Charger les variables d'environnement depuis .env
 
 const app = new Hono();
 
@@ -19,6 +22,7 @@ app.use('/static/*', serveStatic({ root: './' }));
 
 // Routes API
 app.route('/api', apiRoutes);
+app.route('/api/import', importApi);
 
 // Routes des pages (HTML)
 app.route('/', pageRoutes);

@@ -27,13 +27,24 @@ export interface TimelineData {
 
 export class MoodService {
     // Créer une entrée d'humeur
-    static async createMood(userId: string, mood: number, note?: string, tags: string[] = []): Promise<MoodEntry> {
+    static async createMood(
+        userId: string,
+        mood: number,
+        note?: string,
+        tags: string[] = [],
+        sleepHours?: number,
+        medication?: number,
+        emotions?: string
+    ): Promise<MoodEntry> {
         try {
             const newMood: NewMoodEntry = {
                 userId,
                 mood,
                 note,
                 tags,
+                sleepHours,
+                medication,
+                emotions,
                 timestamp: new Date(),
             };
 

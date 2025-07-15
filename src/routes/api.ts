@@ -1,7 +1,9 @@
 // src/routes/api.ts - Version Drizzle
 import { Hono } from 'hono';
 import MoodService from '../services/moodService.ts';
+import ImportService from '../services/importService.ts';
 import { ensureDefaultUser } from '../db/database.ts';
+import { eq } from 'drizzle-orm';
 
 const api = new Hono();
 
@@ -51,7 +53,7 @@ api.get('/moods', async (c) => {
 // POST /api/moods - Créer une humeur
 api.post('/moods', async (c) => {
     try {
-        const { mood, note, tags } = await c.req.json();
+        const { mood, note, tags, sleepHours, medication, emotions } = await c.req.json();
 
         // Récupérer l'utilisateur par défaut
         const user = await ensureDefaultUser();
@@ -62,7 +64,15 @@ api.post('/moods', async (c) => {
             return c.json({ error: 'L\'humeur doit être un nombre entre 0 et 10' }, 400);
         }
 
-        const moodEntry = await MoodService.createMood(userId, mood, note, tags || []);
+        const moodEntry = await MoodService.createMood(
+            userId,
+            mood,
+            note,
+            tags || [],
+            sleepHours,
+            medication,
+            emotions
+        );
 
         return c.json({
             success: true,
@@ -221,6 +231,33 @@ api.get('/debug', async (c) => {
     } catch (error) {
         console.error('Erreur lors de la récupération des infos de débogage:', error);
         return c.json({ error: 'Échec de la récupération des infos de débogage' }, 500);
+    }
+});
+
+// POST /api/import/csv - Importer des données depuis un CSV
+api.post('/import/csv', async (c) => {
+    try {
+        const user = await ensureDefaultUser();
+        const userId = user.id;
+
+        // Récupérer le fichier téléchargé
+        const { file, options } = await c.req.json();
+
+        if (!file) {
+            return c.json({ error: 'Aucun contenu CSV fourni' }, 400);
+        }
+
+        // Importer les données
+        const importResults = await ImportService.importFromCsv(userId, file, options);
+
+        return c.json({
+            success: true,
+            results: importResults,
+            message: `Importation terminée : ${importResults.success} entrées importées avec succès, ${importResults.failed} échouées sur ${importResults.total} total.`
+        });
+    } catch (error) {
+        console.error('Erreur lors de l\'importation CSV:', error);
+        return c.json({ error: 'Échec de l\'importation CSV' }, 500);
     }
 });
 

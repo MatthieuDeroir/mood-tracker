@@ -1,5 +1,210 @@
-// Variables d'état
+// Mettre à jour le graphique pour les heures de sommeil
+function updateSleepChart() {
+    const ctx = document.getElementById('sleepChart').getContext('2d');
+
+    // Détruire le graphique existant s'il y en a un
+    if (sleepChartInstance) {
+        sleepChartInstance.destroy();
+    }
+
+    // Filtrer les données qui ont des informations de sommeil
+    const dataWithSleep = moodData.filter(d =>
+        d.entries.some(entry => entry.sleepHours !== null && entry.sleepHours !== undefined)
+    );
+
+    if (dataWithSleep.length === 0) {
+        document.getElementById('sleepChartContainer').innerHTML =
+            '<p class="no-data">Pas de données de sommeil disponibles pour cette période.</p>';
+        return;
+    }
+
+    // Préparation des données
+    const labels = dataWithSleep.map(d => {
+        const date = new Date(d.date);
+        if (currentPeriod === 'day') {
+            return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        } else if (currentPeriod === 'week') {
+            return date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' });
+        } else {
+            return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+        }
+    });
+
+    // Calculer les heures de sommeil moyennes par jour
+    const sleepValues = dataWithSleep.map(d => {
+        const entriesWithSleep = d.entries.filter(entry =>
+            entry.sleepHours !== null && entry.sleepHours !== undefined
+        );
+
+        if (entriesWithSleep.length === 0) return null;
+
+        const totalSleep = entriesWithSleep.reduce((sum, entry) => sum + entry.sleepHours, 0);
+        return totalSleep / entriesWithSleep.length;
+    });
+
+    const moodValues = dataWithSleep.map(d => d.averageMood);
+
+    // Créer le graphique
+    sleepChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Heures de sommeil',
+                    data: sleepValues,
+                    borderColor: '#9b59b6',
+                    backgroundColor: 'rgba(155, 89, 182, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y',
+                },
+                {
+                    label: 'Humeur moyenne',
+                    data: moodValues,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    tension: 0.4,
+                    fill: false,
+                    yAxisID: 'y1',
+                    borderDash: [5, 5],
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Heures de sommeil'
+                    }
+                },
+                y1: {
+                    beginAtZero: true,
+                    max: 10,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Humeur (0-10)'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                }
+            }
+        }
+    });
+}
+
+// Afficher l'analyse de corrélation sommeil/humeur
+function displaySleepMoodCorrelation() {
+    const correlationDiv = document.getElementById('sleepMoodCorrelation');
+
+    // Préparer les données pour l'analyse
+    const allEntries = moodData.flatMap(d => d.entries);
+
+    // Filtrer pour garder seulement les entrées avec des données de sommeil
+    const entriesWithSleep = allEntries.filter(entry =>
+        entry.sleepHours !== null && entry.sleepHours !== undefined
+    );
+
+    if (entriesWithSleep.length < 3) {
+        correlationDiv.innerHTML = `
+      <div class="info-message">
+        <p>Pas assez de données pour analyser la corrélation entre le sommeil et l'humeur.</p>
+        <p>Ajoutez plus d'entrées avec des heures de sommeil pour voir cette analyse.</p>
+      </div>
+    `;
+        return;
+    }
+
+    const analysis = analyzeSleepMoodCorrelation(entriesWithSleep);
+
+    let correlationClass = 'neutral';
+    if (analysis.correlation > 0.3) correlationClass = 'positive';
+    if (analysis.correlation < -0.3) correlationClass = 'negative';
+
+    correlationDiv.innerHTML = `
+    <div class="correlation ${correlationClass}">
+      <h3>Corrélation Sommeil-Humeur: ${analysis.correlation}</h3>
+      <p>${analysis.message}</p>
+      <div class="sleep-recommendation">
+        <strong>Suggestion:</strong> 
+        ${analysis.correlation > 0.3
+        ? 'Essayez de maintenir un rythme de sommeil régulier pour améliorer votre humeur.'
+        : 'Continuez à suivre votre sommeil pour obtenir des analyses plus précises.'}
+      </div>
+    </div>
+  `;
+}// Ajouter la visualisation de la corrélation sommeil/humeur
+function analyzeSleepMoodCorrelation(data) {
+    // Filtrer les données qui ont à la fois une humeur et des heures de sommeil
+    const dataWithSleep = data.filter(entry =>
+        entry.sleepHours !== null &&
+        entry.sleepHours !== undefined
+    );
+
+    if (dataWithSleep.length < 3) {
+        return {
+            correlation: null,
+            message: "Pas assez de données pour analyser la corrélation sommeil/humeur"
+        };
+    }
+
+    // Calculer la corrélation (simplifiée)
+    let sumSleep = 0;
+    let sumMood = 0;
+    let sumSleepMood = 0;
+    let sumSleepSquared = 0;
+    let sumMoodSquared = 0;
+
+    dataWithSleep.forEach(entry => {
+        sumSleep += entry.sleepHours;
+        sumMood += entry.mood;
+        sumSleepMood += entry.sleepHours * entry.mood;
+        sumSleepSquared += entry.sleepHours * entry.sleepHours;
+        sumMoodSquared += entry.mood * entry.mood;
+    });
+
+    const n = dataWithSleep.length;
+    const numerator = n * sumSleepMood - sumSleep * sumMood;
+    const denominator = Math.sqrt((n * sumSleepSquared - sumSleep * sumSleep) *
+        (n * sumMoodSquared - sumMood * sumMood));
+
+    if (denominator === 0) return { correlation: 0, message: "Pas de corrélation détectée" };
+
+    const correlation = numerator / denominator;
+
+    let message;
+    if (correlation > 0.7) {
+        message = "Forte corrélation positive : plus vous dormez, meilleure est votre humeur";
+    } else if (correlation > 0.3) {
+        message = "Corrélation positive modérée : le sommeil semble améliorer votre humeur";
+    } else if (correlation > 0) {
+        message = "Légère corrélation positive : un effet modeste du sommeil sur l'humeur";
+    } else if (correlation > -0.3) {
+        message = "Légère corrélation négative : pas d'effet notable du sommeil";
+    } else if (correlation > -0.7) {
+        message = "Corrélation négative modérée : des données inhabituelles";
+    } else {
+        message = "Forte corrélation négative : les données suggèrent que plus de sommeil correspond à une moins bonne humeur (inhabituel)";
+    }
+
+    return {
+        correlation: correlation.toFixed(2),
+        message
+    };
+}// Variables d'état
 let chartInstance = null;
+let sleepChartInstance = null;
 let currentPeriod = 'week';
 let moodData = [];
 
@@ -70,6 +275,10 @@ async function loadTimelineData() {
 
         moodData = await response.json();
         updateChart();
+        updateSleepChart();
+
+        // Analyser la corrélation entre le sommeil et l'humeur
+        displaySleepMoodCorrelation();
     } catch (error) {
         console.error('Erreur chargement timeline:', error);
     }

@@ -14,6 +14,12 @@ pages.get('/analytics', async (c) => {
     return c.html(html);
 });
 
+// Page d'importation
+pages.get('/import', async (c) => {
+    const html = await Deno.readTextFile('./views/import.html');
+    return c.html(html);
+});
+
 // API de test pour vérifier que tout fonctionne
 pages.get('/test', async (c) => {
     return c.json({

@@ -14,6 +14,7 @@
         <nav>
             <a href="/">Dashboard</a>
             <a href="/analytics" class="active">Analytics</a>
+            <a href="/import">Import</a>
         </nav>
     </header>
 
@@ -50,6 +51,16 @@
         <section class="chart-container">
             <h2>Évolution du mood</h2>
             <canvas id="moodChart" width="400" height="200"></canvas>
+        </section>
+
+        <!-- Nouvelle section pour le sommeil -->
+        <section class="chart-container" id="sleepChartContainer">
+            <h2>Sommeil et Humeur</h2>
+            <canvas id="sleepChart" width="400" height="200"></canvas>
+
+            <div id="sleepMoodCorrelation" class="correlation-container">
+                <!-- Contenu généré dynamiquement -->
+            </div>
         </section>
 
         <section class="patterns">

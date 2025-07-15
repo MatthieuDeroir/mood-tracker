@@ -7,7 +7,8 @@ import {
     timestamp,
     integer,
     jsonb,
-    index
+    index,
+    real,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -47,6 +48,10 @@ export const moodEntries = pgTable('mood_entries', {
     mood: integer('mood').notNull(), // La contrainte check sera ajoutée dans les migrations
     note: text('note'),
     tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    // Nouvelles colonnes
+    sleepHours: real('sleep_hours'), // Heures de sommeil
+    medication: real('medication'), // Dose de médicaments
+    emotions: text('emotions'), // Émotions en texte libre
     timestamp: timestamp('timestamp').defaultNow().notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull()
