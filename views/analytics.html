@@ -53,13 +53,61 @@
             <canvas id="moodChart" width="400" height="200"></canvas>
         </section>
 
-        <!-- Nouvelle section pour le sommeil -->
+        <!-- Section pour le sommeil -->
         <section class="chart-container" id="sleepChartContainer">
             <h2>Sommeil et Humeur</h2>
             <canvas id="sleepChart" width="400" height="200"></canvas>
 
             <div id="sleepMoodCorrelation" class="correlation-container">
                 <!-- Contenu généré dynamiquement -->
+            </div>
+        </section>
+
+        <!-- Nouvelle section: Tableau des entrées -->
+        <section class="entries-section">
+            <div class="section-header">
+                <h2>Toutes les entrées</h2>
+                <button id="toggleEntriesBtn" class="toggle-btn">
+                    <span class="arrow-icon">▼</span>
+                </button>
+            </div>
+
+            <div id="entriesTableContainer" class="hidden">
+                <div class="table-controls">
+                    <input type="text" id="entriesFilter" placeholder="Filtrer les entrées..." class="filter-input">
+                    <select id="entriesSortBy" class="sort-select">
+                        <option value="date-desc">Date (récente d'abord)</option>
+                        <option value="date-asc">Date (ancienne d'abord)</option>
+                        <option value="mood-desc">Humeur (élevée d'abord)</option>
+                        <option value="mood-asc">Humeur (basse d'abord)</option>
+                    </select>
+                </div>
+
+                <div class="table-wrapper">
+                    <table id="entriesTable" class="entries-table">
+                        <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Heure</th>
+                            <th>Humeur</th>
+                            <th>Sommeil</th>
+                            <th>Médicament</th>
+                            <th>Émotions</th>
+                            <th>Note</th>
+                            <th>Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <!-- Contenu généré dynamiquement -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination-controls">
+                    <button id="prevPage" class="pagination-btn">Précédent</button>
+                    <span id="pageInfo">Page 1</span>
+                    <button id="nextPage" class="pagination-btn">Suivant</button>
+                </div>
             </div>
         </section>
 

@@ -1,4 +1,5 @@
-// src/routes/api.ts - Version Drizzle
+// src/routes/api.ts - Version corrigée
+
 import { Hono } from 'hono';
 import MoodService from '../services/moodService.ts';
 import ImportService from '../services/importService.ts';
@@ -10,7 +11,8 @@ const api = new Hono();
 // GET /api/health - Vérification d'état
 api.get('/health', async (c) => {
     try {
-        const totalMoods = await MoodService.getUserMoods('user1');
+        const user = await ensureDefaultUser();
+        const totalMoods = await MoodService.getUserMoods(user.id);
 
         return c.json({
             status: 'ok',
@@ -19,6 +21,7 @@ api.get('/health', async (c) => {
             totalMoods: totalMoods.length
         });
     } catch (error) {
+        console.error('Erreur health check:', error);
         return c.json({
             status: 'error',
             error: error.message
@@ -31,22 +34,40 @@ api.get('/moods', async (c) => {
     try {
         // Pour une approche simplifiée, nous récupérons d'abord l'utilisateur par défaut
         const user = await ensureDefaultUser();
-        const userId = user.id; // Utilisation de l'ID généré automatiquement
+        const userId = user.id;
 
-        const startDate = c.req.query('start');
-        const limit = parseInt(c.req.query('limit') || '100');
+        // Récupérer les paramètres de requête
+        const startParam = c.req.query('start');
+        const endParam = c.req.query('end');
+        const limitParam = c.req.query('limit');
 
-        let start: Date | undefined;
-        if (startDate) {
-            start = new Date(startDate);
+        const limit = limitParam ? parseInt(limitParam) : 100;
+
+        // Convertir les dates si présentes
+        let startDate, endDate;
+        if (startParam) {
+            startDate = new Date(startParam);
+            console.log(`Date de début demandée: ${startParam}, convertie en: ${startDate}`);
+        }
+        if (endParam) {
+            endDate = new Date(endParam);
         }
 
-        const moods = await MoodService.getUserMoods(userId, start, undefined, limit);
+        // Vérifier que les dates sont valides
+        if (startParam && isNaN(startDate.getTime())) {
+            return c.json({ error: 'Date de début invalide' }, 400);
+        }
+        if (endParam && isNaN(endDate.getTime())) {
+            return c.json({ error: 'Date de fin invalide' }, 400);
+        }
+
+        const moods = await MoodService.getUserMoods(userId, startDate, endDate, limit);
+        console.log(`Moods récupérés: ${moods.length}`);
 
         return c.json(moods);
     } catch (error) {
         console.error('Erreur lors de la récupération des humeurs:', error);
-        return c.json({ error: 'Échec de la récupération des humeurs' }, 500);
+        return c.json({ error: 'Échec de la récupération des humeurs', details: error.message }, 500);
     }
 });
 
@@ -64,15 +85,18 @@ api.post('/moods', async (c) => {
             return c.json({ error: 'L\'humeur doit être un nombre entre 0 et 10' }, 400);
         }
 
-        const moodEntry = await MoodService.createMood(
+        const newMood = {
             userId,
             mood,
             note,
-            tags || [],
-            sleepHours,
-            medication,
-            emotions
-        );
+            tags: tags || [],
+            sleepHours: sleepHours !== undefined ? parseFloat(sleepHours) : null,
+            medication: medication !== undefined ? parseFloat(medication) : null,
+            emotions,
+            timestamp: new Date()
+        };
+
+        const moodEntry = await MoodService.createMood(userId, newMood);
 
         return c.json({
             success: true,
@@ -82,30 +106,22 @@ api.post('/moods', async (c) => {
         });
     } catch (error) {
         console.error('Erreur lors de la création de l\'humeur:', error);
-        return c.json({ error: 'Échec de la création de l\'humeur' }, 500);
+        return c.json({ error: 'Échec de la création de l\'humeur', details: error.message }, 500);
     }
 });
 
 // PUT /api/moods/:id - Mettre à jour une humeur
 api.put('/moods/:id', async (c) => {
     try {
-        const user = await ensureDefaultUser();
-        const userId = user.id;
-
         const moodId = c.req.param('id');
-        const { mood, note, tags } = await c.req.json();
+        const updates = await c.req.json();
 
         // Validation
-        if (mood !== undefined && (typeof mood !== 'number' || mood < 0 || mood > 10)) {
+        if (updates.mood !== undefined && (typeof updates.mood !== 'number' || updates.mood < 0 || updates.mood > 10)) {
             return c.json({ error: 'L\'humeur doit être un nombre entre 0 et 10' }, 400);
         }
 
-        const updates: any = {};
-        if (mood !== undefined) updates.mood = mood;
-        if (note !== undefined) updates.note = note;
-        if (tags !== undefined) updates.tags = tags;
-
-        const updatedMood = await MoodService.updateMood(moodId, userId, updates);
+        const updatedMood = await MoodService.updateMood(moodId, updates);
 
         if (!updatedMood) {
             return c.json({ error: 'Humeur non trouvée' }, 404);
@@ -118,19 +134,16 @@ api.put('/moods/:id', async (c) => {
         });
     } catch (error) {
         console.error('Erreur lors de la mise à jour de l\'humeur:', error);
-        return c.json({ error: 'Échec de la mise à jour de l\'humeur' }, 500);
+        return c.json({ error: 'Échec de la mise à jour de l\'humeur', details: error.message }, 500);
     }
 });
 
 // DELETE /api/moods/:id - Supprimer une humeur
 api.delete('/moods/:id', async (c) => {
     try {
-        const user = await ensureDefaultUser();
-        const userId = user.id;
-
         const moodId = c.req.param('id');
 
-        const success = await MoodService.deleteMood(moodId, userId);
+        const success = await MoodService.deleteMood(moodId);
 
         if (!success) {
             return c.json({ error: 'Humeur non trouvée' }, 404);
@@ -142,7 +155,7 @@ api.delete('/moods/:id', async (c) => {
         });
     } catch (error) {
         console.error('Erreur lors de la suppression de l\'humeur:', error);
-        return c.json({ error: 'Échec de la suppression de l\'humeur' }, 500);
+        return c.json({ error: 'Échec de la suppression de l\'humeur', details: error.message }, 500);
     }
 });
 
@@ -152,14 +165,43 @@ api.get('/analytics', async (c) => {
         const user = await ensureDefaultUser();
         const userId = user.id;
 
-        const days = parseInt(c.req.query('days') || '7');
+        const days = parseInt(c.req.query('days') || '30');
 
         const stats = await MoodService.getMoodStats(userId, days);
+        console.log('Stats récupérées:', JSON.stringify(stats, null, 2));
 
-        return c.json(stats);
+        // Vérifier les valeurs pour éviter les undefined
+        const safeStats = {
+            average: stats.average || 0,
+            count: stats.count || 0,
+            min: stats.min || 0,
+            max: stats.max || 0,
+            period: stats.period || `${days} jours`,
+            trends: stats.trends || {
+                byHour: [],
+                byDayOfWeek: [],
+                byMonth: []
+            }
+        };
+
+        return c.json(safeStats);
     } catch (error) {
         console.error('Erreur lors de la récupération des analyses:', error);
-        return c.json({ error: 'Échec de la récupération des analyses' }, 500);
+        return c.json({
+            error: 'Échec de la récupération des analyses',
+            details: error.message,
+            // Retourner des valeurs par défaut pour éviter les erreurs côté client
+            average: 0,
+            count: 0,
+            min: 0,
+            max: 0,
+            period: '30 jours',
+            trends: {
+                byHour: [],
+                byDayOfWeek: [],
+                byMonth: []
+            }
+        }, 500);
     }
 });
 
@@ -170,15 +212,28 @@ api.get('/timeline', async (c) => {
         const userId = user.id;
 
         const period = c.req.query('period') as 'day' | 'week' | 'month' || 'week';
-        const startDate = new Date(c.req.query('start') || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-        const endDate = new Date(c.req.query('end') || new Date());
+        let startDate = new Date(c.req.query('start') || '');
+        let endDate = new Date(c.req.query('end') || '');
+
+        // Vérifier si les dates sont valides, sinon utiliser des valeurs par défaut
+        if (isNaN(startDate.getTime())) {
+            startDate = new Date();
+            startDate.setDate(startDate.getDate() - 7);
+        }
+
+        if (isNaN(endDate.getTime())) {
+            endDate = new Date();
+        }
+
+        console.log(`Récupération timeline: période=${period}, début=${startDate.toISOString()}, fin=${endDate.toISOString()}`);
 
         const timelineData = await MoodService.getTimelineData(userId, period, startDate, endDate);
+        console.log(`Données timeline récupérées: ${timelineData.length} points`);
 
         return c.json(timelineData);
     } catch (error) {
         console.error('Erreur lors de la récupération de la timeline:', error);
-        return c.json({ error: 'Échec de la récupération de la timeline' }, 500);
+        return c.json({ error: 'Échec de la récupération de la timeline', details: error.message }, 500);
     }
 });
 
@@ -204,7 +259,7 @@ api.get('/search', async (c) => {
         });
     } catch (error) {
         console.error('Erreur lors de la recherche des humeurs:', error);
-        return c.json({ error: 'Échec de la recherche des humeurs' }, 500);
+        return c.json({ error: 'Échec de la recherche des humeurs', details: error.message }, 500);
     }
 });
 
@@ -230,34 +285,7 @@ api.get('/debug', async (c) => {
         });
     } catch (error) {
         console.error('Erreur lors de la récupération des infos de débogage:', error);
-        return c.json({ error: 'Échec de la récupération des infos de débogage' }, 500);
-    }
-});
-
-// POST /api/import/csv - Importer des données depuis un CSV
-api.post('/import/csv', async (c) => {
-    try {
-        const user = await ensureDefaultUser();
-        const userId = user.id;
-
-        // Récupérer le fichier téléchargé
-        const { file, options } = await c.req.json();
-
-        if (!file) {
-            return c.json({ error: 'Aucun contenu CSV fourni' }, 400);
-        }
-
-        // Importer les données
-        const importResults = await ImportService.importFromCsv(userId, file, options);
-
-        return c.json({
-            success: true,
-            results: importResults,
-            message: `Importation terminée : ${importResults.success} entrées importées avec succès, ${importResults.failed} échouées sur ${importResults.total} total.`
-        });
-    } catch (error) {
-        console.error('Erreur lors de l\'importation CSV:', error);
-        return c.json({ error: 'Échec de l\'importation CSV' }, 500);
+        return c.json({ error: 'Échec de la récupération des infos de débogage', details: error.message }, 500);
     }
 });
 

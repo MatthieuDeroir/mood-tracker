@@ -1,4 +1,4 @@
-// src/services/moodService.ts - Service avec Drizzle
+// src/services/moodService.ts
 import { db } from '../db/database.ts';
 import { moodEntries, users, MoodEntry, NewMoodEntry } from '../db/schema.ts';
 import { eq, and, gte, lte, like, desc, sql, avg, count, min, max } from 'drizzle-orm';
@@ -26,42 +26,85 @@ export interface TimelineData {
 }
 
 export class MoodService {
-    // Créer une entrée d'humeur
-    static async createMood(
-        userId: string,
-        mood: number,
-        note?: string,
-        tags: string[] = [],
-        sleepHours?: number,
-        medication?: number,
-        emotions?: string
-    ): Promise<MoodEntry> {
+    /**
+     * Crée une nouvelle entrée d'humeur
+     */
+    static async createMood(userId: string, newMood: NewMoodEntry): Promise<MoodEntry> {
         try {
-            const newMood: NewMoodEntry = {
-                userId,
-                mood,
-                note,
-                tags,
-                sleepHours,
-                medication,
-                emotions,
-                timestamp: new Date(),
-            };
-
-            const [moodEntry] = await db.insert(moodEntries)
-                .values(newMood)
+            const [mood] = await db.insert(moodEntries)
+                .values({
+                    ...newMood,
+                    userId
+                })
                 .returning();
 
-            console.log(`💾 Humeur créée: ${mood}/10 pour l'utilisateur ${userId}`);
-            return moodEntry;
+            return mood;
         } catch (error) {
             console.error('Erreur lors de la création de l\'humeur:', error);
             throw error;
         }
     }
 
-    // Récupérer les humeurs d'un utilisateur
-    static async getUserMoods(userId: string, startDate?: Date, endDate?: Date, limit = 100): Promise<MoodEntry[]> {
+    /**
+     * Récupère une entrée d'humeur par ID
+     */
+    static async getMoodById(id: string): Promise<MoodEntry | null> {
+        try {
+            const [mood] = await db.select()
+                .from(moodEntries)
+                .where(eq(moodEntries.id, id));
+
+            return mood || null;
+        } catch (error) {
+            console.error('Erreur lors de la récupération de l\'humeur:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Met à jour une entrée d'humeur
+     */
+    static async updateMood(id: string, updates: Partial<MoodEntry>): Promise<MoodEntry | null> {
+        try {
+            const { userId, ...validUpdates } = updates;
+
+            const [updatedMood] = await db.update(moodEntries)
+                .set(validUpdates)
+                .where(eq(moodEntries.id, id))
+                .returning();
+
+            return updatedMood || null;
+        } catch (error) {
+            console.error('Erreur lors de la mise à jour de l\'humeur:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Supprime une entrée d'humeur
+     */
+    static async deleteMood(id: string): Promise<boolean> {
+        try {
+            const result = await db.delete(moodEntries)
+                .where(eq(moodEntries.id, id))
+                .returning();
+
+            return result.length > 0;
+        } catch (error) {
+            console.error('Erreur lors de la suppression de l\'humeur:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Récupère toutes les entrées d'humeur d'un utilisateur
+     */
+    static async getUserMoods(
+        userId: string,
+        startDate?: Date,
+        endDate?: Date,
+        limit = 100
+    ): Promise<MoodEntry[]> {
         try {
             let query = db.select().from(moodEntries)
                 .where(eq(moodEntries.userId, userId))
@@ -69,207 +112,149 @@ export class MoodService {
                 .limit(limit);
 
             if (startDate) {
-                query = query.where(gte(moodEntries.timestamp, startDate));
+                // Assurez-vous que la date de début est correctement formatée et au début de la journée
+                const startOfDay = new Date(
+                    startDate.getFullYear(),
+                    startDate.getMonth(),
+                    startDate.getDate(),
+                    0, 0, 0
+                );
+                console.log(`Filtrage par date de début: ${startOfDay.toISOString()}`);
+                query = query.where(gte(moodEntries.timestamp, startOfDay));
             }
 
             if (endDate) {
-                query = query.where(lte(moodEntries.timestamp, endDate));
+                // Assurez-vous que la date de fin est correctement formatée et à la fin de la journée
+                const endOfDay = new Date(
+                    endDate.getFullYear(),
+                    endDate.getMonth(),
+                    endDate.getDate(),
+                    23, 59, 59
+                );
+                console.log(`Filtrage par date de fin: ${endOfDay.toISOString()}`);
+                query = query.where(lte(moodEntries.timestamp, endOfDay));
             }
 
-            return await query;
+            const results = await query;
+            console.log(`Récupération des humeurs: ${results.length} entrées trouvées`);
+            return results;
         } catch (error) {
             console.error('Erreur lors de la récupération des humeurs:', error);
             throw error;
         }
     }
 
-    // Récupérer une humeur par ID
-    static async getMoodById(moodId: string, userId: string): Promise<MoodEntry | undefined> {
+    /**
+     * Récupère les statistiques des humeurs pour une période donnée
+     */
+    static async getMoodStats(userId: string, days: number = 30): Promise<MoodStats> {
         try {
-            const [mood] = await db.select()
-                .from(moodEntries)
-                .where(and(
-                    eq(moodEntries.id, moodId),
-                    eq(moodEntries.userId, userId)
-                ));
+            // Calculer la date de début pour la période
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
 
-            return mood;
-        } catch (error) {
-            console.error('Erreur lors de la récupération de l\'humeur:', error);
-            throw error;
-        }
-    }
-
-    // Supprimer une humeur
-    static async deleteMood(moodId: string, userId: string): Promise<boolean> {
-        try {
-            const result = await db.delete(moodEntries)
-                .where(and(
-                    eq(moodEntries.id, moodId),
-                    eq(moodEntries.userId, userId)
-                ));
-
-            console.log(`🗑️ Humeur supprimée: ${moodId} pour l'utilisateur ${userId}`);
-            return result.rowCount > 0;
-        } catch (error) {
-            console.error('Erreur lors de la suppression de l\'humeur:', error);
-            throw error;
-        }
-    }
-
-    // Mettre à jour une humeur
-    static async updateMood(
-        moodId: string,
-        userId: string,
-        updates: Partial<{ mood: number; note: string; tags: string[] }>
-    ): Promise<MoodEntry | undefined> {
-        try {
-            const [updatedMood] = await db.update(moodEntries)
-                .set({
-                    ...updates,
-                    updatedAt: new Date()
+            // Requête pour les statistiques de base
+            const [stats] = await db
+                .select({
+                    average: avg(moodEntries.mood),
+                    count: count(),
+                    min: min(moodEntries.mood),
+                    max: max(moodEntries.mood)
                 })
-                .where(and(
-                    eq(moodEntries.id, moodId),
-                    eq(moodEntries.userId, userId)
-                ))
-                .returning();
-
-            if (!updatedMood) {
-                return undefined;
-            }
-
-            console.log(`📝 Humeur mise à jour: ${moodId} pour l'utilisateur ${userId}`);
-            return updatedMood;
-        } catch (error) {
-            console.error('Erreur lors de la mise à jour de l\'humeur:', error);
-            throw error;
-        }
-    }
-
-    // Statistiques générales
-    static async getMoodStats(userId: string, days = 7): Promise<MoodStats> {
-        try {
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - days);
-
-            const result = await db.select({
-                avgMood: avg(moodEntries.mood),
-                moodCount: count(),
-                minMood: min(moodEntries.mood),
-                maxMood: max(moodEntries.mood),
-            })
                 .from(moodEntries)
-                .where(and(
-                    eq(moodEntries.userId, userId),
-                    gte(moodEntries.timestamp, cutoffDate)
-                ));
+                .where(
+                    and(
+                        eq(moodEntries.userId, userId),
+                        gte(moodEntries.timestamp, startDate)
+                    )
+                );
 
-            const stats = result[0];
-
-            if (!stats || stats.moodCount === 0) {
-                return {
-                    average: 0,
-                    count: 0,
-                    min: 0,
-                    max: 0,
-                    period: `${days} days`,
-                };
-            }
-
-            // Arrondir la moyenne à 1 décimale
-            const average = Math.round((stats.avgMood || 0) * 10) / 10;
-
-            // Récupérer les tendances
-            const trends = await this.getTrends(userId, cutoffDate);
-
-            return {
-                average,
-                count: Number(stats.moodCount),
-                min: stats.minMood || 0,
-                max: stats.maxMood || 0,
-                period: `${days} jours`,
-                trends,
-            };
-        } catch (error) {
-            console.error('Erreur lors de la récupération des statistiques d\'humeur:', error);
-            throw error;
-        }
-    }
-
-    // Tendances détaillées
-    static async getTrends(userId: string, startDate: Date) {
-        try {
-            // Tendances par heure (avec PostgreSQL)
-            const hourlyQuery = sql`
-                SELECT
+            // Requête pour les tendances par heure
+            const byHourQuery = sql`
+                SELECT 
                     EXTRACT(HOUR FROM timestamp) as hour,
                     AVG(mood) as avg_mood,
-                    COUNT(*) as count
+                    COUNT(*) as entry_count
                 FROM mood_entries
-                WHERE user_id = ${userId} AND timestamp >= ${startDate}
+                WHERE user_id = ${userId}
+                  AND timestamp >= ${startDate.toISOString()}
                 GROUP BY EXTRACT(HOUR FROM timestamp)
                 ORDER BY hour
             `;
 
-            const hourlyTrends = await db.execute(hourlyQuery);
-
-            // Tendances par jour de la semaine
-            const weeklyQuery = sql`
-                SELECT
+            // Requête pour les tendances par jour de la semaine
+            const byDayOfWeekQuery = sql`
+                SELECT 
                     EXTRACT(DOW FROM timestamp) as day_of_week,
                     AVG(mood) as avg_mood,
-                    COUNT(*) as count
+                    COUNT(*) as entry_count
                 FROM mood_entries
-                WHERE user_id = ${userId} AND timestamp >= ${startDate}
+                WHERE user_id = ${userId}
+                  AND timestamp >= ${startDate.toISOString()}
                 GROUP BY EXTRACT(DOW FROM timestamp)
                 ORDER BY day_of_week
             `;
 
-            const weeklyTrends = await db.execute(weeklyQuery);
-
-            // Tendances par mois
-            const monthlyQuery = sql`
-                SELECT
+            // Requête pour les tendances par mois
+            const byMonthQuery = sql`
+                SELECT 
                     EXTRACT(MONTH FROM timestamp) as month,
                     AVG(mood) as avg_mood,
-                    COUNT(*) as count
+                    COUNT(*) as entry_count
                 FROM mood_entries
-                WHERE user_id = ${userId} AND timestamp >= ${startDate}
+                WHERE user_id = ${userId}
+                  AND timestamp >= ${startDate.toISOString()}
                 GROUP BY EXTRACT(MONTH FROM timestamp)
                 ORDER BY month
             `;
 
-            const monthlyTrends = await db.execute(monthlyQuery);
+            // Exécuter toutes les requêtes de tendances
+            const [byHourResult, byDayOfWeekResult, byMonthResult] = await Promise.all([
+                db.execute(byHourQuery),
+                db.execute(byDayOfWeekQuery),
+                db.execute(byMonthQuery)
+            ]);
+
+            // Transformer les résultats
+            const byHour = byHourResult.rows.map((row: any) => ({
+                hour: parseInt(row.hour),
+                avgMood: parseFloat(row.avg_mood),
+                count: parseInt(row.entry_count)
+            }));
+
+            const byDayOfWeek = byDayOfWeekResult.rows.map((row: any) => ({
+                dayOfWeek: parseInt(row.day_of_week),
+                avgMood: parseFloat(row.avg_mood),
+                count: parseInt(row.entry_count)
+            }));
+
+            const byMonth = byMonthResult.rows.map((row: any) => ({
+                month: parseInt(row.month),
+                avgMood: parseFloat(row.avg_mood),
+                count: parseInt(row.entry_count)
+            }));
 
             return {
-                byHour: hourlyTrends.rows.map((t: any) => ({
-                    hour: parseInt(t.hour),
-                    avgMood: Math.round(t.avg_mood * 10) / 10,
-                    count: parseInt(t.count),
-                })),
-                byDayOfWeek: weeklyTrends.rows.map((t: any) => ({
-                    dayOfWeek: parseInt(t.day_of_week),
-                    avgMood: Math.round(t.avg_mood * 10) / 10,
-                    count: parseInt(t.count),
-                })),
-                byMonth: monthlyTrends.rows.map((t: any) => ({
-                    month: parseInt(t.month),
-                    avgMood: Math.round(t.avg_mood * 10) / 10,
-                    count: parseInt(t.count),
-                })),
+                average: stats.average ? Math.round(stats.average * 10) / 10 : 0,
+                count: stats.count || 0,
+                min: stats.min || 0,
+                max: stats.max || 0,
+                period: `${days} jours`,
+                trends: {
+                    byHour,
+                    byDayOfWeek,
+                    byMonth
+                }
             };
         } catch (error) {
-            console.error('Erreur lors de la récupération des tendances:', error);
-            return {
-                byHour: [],
-                byDayOfWeek: [],
-                byMonth: [],
-            };
+            console.error('Erreur lors de la récupération des statistiques:', error);
+            throw error;
         }
     }
 
-    // Données pour les graphiques timeline
+    /**
+     * Récupère les données de timeline pour un graphique
+     */
     static async getTimelineData(
         userId: string,
         period: 'day' | 'week' | 'month',
@@ -279,17 +264,24 @@ export class MoodService {
         try {
             let groupByQuery;
 
+            // S'assurer que les dates sont correctement formatées pour la requête SQL
+            const formattedStartDate = startDate.toISOString();
+            const formattedEndDate = endDate.toISOString();
+
+            console.log(`Récupération timeline du ${formattedStartDate} au ${formattedEndDate}, période: ${period}`);
+
             switch (period) {
                 case 'day':
                     groupByQuery = sql`
                         SELECT
                             date_trunc('hour', timestamp) as period,
                             AVG(mood) as average_mood,
-                            COUNT(*) as entry_count
+                            COUNT(*) as entry_count,
+                            json_agg(mood_entries.*) as entries_data
                         FROM mood_entries
                         WHERE user_id = ${userId}
-                          AND timestamp >= ${startDate}
-                          AND timestamp <= ${endDate}
+                          AND timestamp >= ${formattedStartDate}
+                          AND timestamp <= ${formattedEndDate}
                         GROUP BY date_trunc('hour', timestamp)
                         ORDER BY period
                     `;
@@ -299,11 +291,12 @@ export class MoodService {
                         SELECT
                             date_trunc('day', timestamp) as period,
                             AVG(mood) as average_mood,
-                            COUNT(*) as entry_count
+                            COUNT(*) as entry_count,
+                            json_agg(mood_entries.*) as entries_data
                         FROM mood_entries
                         WHERE user_id = ${userId}
-                          AND timestamp >= ${startDate}
-                          AND timestamp <= ${endDate}
+                          AND timestamp >= ${formattedStartDate}
+                          AND timestamp <= ${formattedEndDate}
                         GROUP BY date_trunc('day', timestamp)
                         ORDER BY period
                     `;
@@ -311,14 +304,15 @@ export class MoodService {
                 case 'month':
                     groupByQuery = sql`
                         SELECT
-                            date_trunc('month', timestamp) as period,
+                            date_trunc('week', timestamp) as period,
                             AVG(mood) as average_mood,
-                            COUNT(*) as entry_count
+                            COUNT(*) as entry_count,
+                            json_agg(mood_entries.*) as entries_data
                         FROM mood_entries
                         WHERE user_id = ${userId}
-                          AND timestamp >= ${startDate}
-                          AND timestamp <= ${endDate}
-                        GROUP BY date_trunc('month', timestamp)
+                          AND timestamp >= ${formattedStartDate}
+                          AND timestamp <= ${formattedEndDate}
+                        GROUP BY date_trunc('week', timestamp)
                         ORDER BY period
                     `;
                     break;
@@ -327,32 +321,51 @@ export class MoodService {
             }
 
             const result = await db.execute(groupByQuery);
+            console.log(`Résultats timeline: ${result.rows.length} périodes trouvées`);
 
-            return result.rows.map((row: any) => ({
-                date: row.period.toISOString(),
-                averageMood: Math.round(row.average_mood * 10) / 10,
-                entryCount: parseInt(row.entry_count),
-                entries: [], // Peut être rempli si nécessaire
-            }));
+            // Si aucun résultat, retourner un tableau vide
+            if (!result.rows || result.rows.length === 0) {
+                console.log('Aucune donnée trouvée pour la période spécifiée');
+                return [];
+            }
+
+            return result.rows.map((row: any) => {
+                // Convertir les entrées JSON en objets d'entrée réels
+                const entries = row.entries_data || [];
+                console.log(`Période ${row.period}: ${entries.length} entrées, moyenne: ${row.average_mood}`);
+
+                return {
+                    date: row.period.toISOString(),
+                    averageMood: Math.round(row.average_mood * 10) / 10,
+                    entryCount: parseInt(row.entry_count),
+                    entries: entries
+                };
+            });
         } catch (error) {
             console.error('Erreur lors de la récupération des données de timeline:', error);
             throw error;
         }
     }
 
-    // Recherche dans les notes
-    static async searchMoods(userId: string, query: string, limit = 50): Promise<MoodEntry[]> {
+    /**
+     * Recherche des entrées d'humeur par mots-clés
+     */
+    static async searchMoods(userId: string, query: string, limit = 10): Promise<MoodEntry[]> {
         try {
-            const moods = await db.select()
+            const likeQuery = `%${query}%`;
+
+            const results = await db.select()
                 .from(moodEntries)
-                .where(and(
-                    eq(moodEntries.userId, userId),
-                    like(moodEntries.note || '', `%${query}%`)
-                ))
+                .where(
+                    and(
+                        eq(moodEntries.userId, userId),
+                        like(moodEntries.note, likeQuery)
+                    )
+                )
                 .orderBy(desc(moodEntries.timestamp))
                 .limit(limit);
 
-            return moods;
+            return results;
         } catch (error) {
             console.error('Erreur lors de la recherche des humeurs:', error);
             throw error;

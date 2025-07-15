@@ -54,12 +54,34 @@ const datePatterns = [
             }
             throw new Error(`Mois inconnu: ${monthName}`);
         }
+    },
+    // Format jour de la semaine seul (lundi, mardi, etc.) - ajouté pour meilleure détection
+    {
+        regex: /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+(\d{1,2})\s+(\w+)\s+(\d{4})/i,
+        parse: (match: RegExpMatchArray) => {
+            const day = parseInt(match[2], 10);
+            const monthName = match[3].toLowerCase();
+            const year = parseInt(match[4], 10);
+
+            // Conversion des noms de mois en français
+            const months: Record<string, number> = {
+                'janvier': 0, 'février': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
+                'juillet': 6, 'août': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11
+            };
+
+            const monthIndex = months[monthName];
+            if (monthIndex !== undefined) {
+                return new Date(year, monthIndex, day);
+            }
+            throw new Error(`Mois inconnu: ${monthName}`);
+        }
     }
 ];
 
 export class ImportService {
     /**
      * Importe des données depuis un CSV au format spécifié
+     * Gère les commentaires multi-lignes
      */
     static async importFromCsv(
         userId: string,
@@ -96,138 +118,108 @@ export class ImportService {
         const results = {
             success: 0,
             failed: 0,
-            total: lines.length - startIndex,
+            total: 0,
             errors
         };
 
-        // Fonction de correction intelligente pour les lignes
-        const fixLine = (line: string, delimiter: string): string => {
-            if (!fixMode) return line;
+        // Variable pour stocker l'entrée en cours de traitement
+        let currentEntry: MoodCsvRow | null = null;
+        let lineNumber = startIndex;
 
-            // Si la ligne contient des guillemets, les gérer spécialement
-            if (line.includes('"')) {
-                // Remplacer temporairement les virgules dans les guillemets
-                let inQuotes = false;
-                let newLine = '';
+        // Tableau pour stocker les entrées traitées
+        const processedEntries: MoodCsvRow[] = [];
 
-                for (let i = 0; i < line.length; i++) {
-                    const char = line[i];
-
-                    if (char === '"') {
-                        inQuotes = !inQuotes;
-                        newLine += char;
-                    } else if (char === ',' && inQuotes) {
-                        newLine += '###COMMA###';
-                    } else {
-                        newLine += char;
-                    }
-                }
-
-                // Traiter la ligne sans les virgules entre guillemets
-                let processed = fixLine(newLine.replace(/"/g, ''), delimiter);
-
-                // Remettre les virgules d'origine
-                return processed.replace(/###COMMA###/g, ',');
-            }
-
-            // Si la ligne ne contient pas assez de délimiteurs, essayer de deviner
-            const delimCount = (line.match(new RegExp(delimiter === '|' ? '\\|' : delimiter, 'g')) || []).length;
-
-            if (delimCount < 5) {
-                // Détection de date au début
-                const datePatterns = [
-                    /^\d{1,2}\/\d{1,2}\/\d{4}/,
-                    /^\d{4}-\d{1,2}-\d{1,2}/,
-                    /^\w+ \d{1,2} \w+ \d{4}/
-                ];
-
-                let dateMatch = null;
-                for (const pattern of datePatterns) {
-                    const match = line.match(pattern);
-                    if (match) {
-                        dateMatch = match;
-                        break;
-                    }
-                }
-
-                if (dateMatch) {
-                    // C'est probablement une ligne de données qui a besoin de plus de délimiteurs
-                    const parts = line.split(delimiter);
-
-                    // Si on a la date mais pas assez d'autres champs
-                    if (parts.length === 1) {
-                        // Essayer de détecter le score à partir du premier nombre après la date
-                        const restOfLine = line.substring(dateMatch[0].length);
-                        const scoreMatch = restOfLine.match(/(\d+)/);
-
-                        if (scoreMatch) {
-                            const score = scoreMatch[1];
-                            const scoreIndex = restOfLine.indexOf(score);
-                            const comment = restOfLine.substring(scoreIndex + score.length).trim();
-
-                            // Reconstruire la ligne avec des valeurs par défaut
-                            return `${dateMatch[0]}${delimiter}${score}${delimiter}0${delimiter}0${delimiter}${delimiter}${comment}`;
-                        } else {
-                            // Pas de score trouvé, ajouter des valeurs par défaut
-                            return `${dateMatch[0]}${delimiter}5${delimiter}0${delimiter}0${delimiter}${delimiter}${restOfLine.trim()}`;
-                        }
-                    }
-
-                    // Si on a déjà quelques champs mais pas tous
-                    while (parts.length < 6) {
-                        parts.push('');
-                    }
-
-                    return parts.join(delimiter);
-                }
-            }
-
-            return line;
-        };
-
-        // Prétraiter et filtrer les lignes
-        lines = lines
-            .filter(line => line.trim().length > 0)
-            .map(line => fixLine(line.trim(), delimiter));
-
-        // Recalculer le total après filtrage
-        results.total = lines.length - startIndex;
-
-        // Traiter chaque ligne
+        // Traiter les lignes en tenant compte des commentaires multi-lignes
         for (let i = startIndex; i < lines.length; i++) {
-            const line = lines[i];
+            const line = lines[i].trim();
             if (!line) continue;
 
-            try {
-                // Essayer d'extraire les parties de la ligne
-                const row = this.parseCsvLine(line, delimiter, fixMode);
+            lineNumber = startIndex + i + 1;
 
-                if (row) {
-                    try {
-                        const moodEntry = await this.createMoodEntryFromCsv(userId, row);
-                        if (moodEntry) {
-                            results.success++;
-                        } else {
-                            results.failed++;
-                            errors.push(`Erreur ligne ${i+1}: Échec de création de l'entrée`);
-                        }
-                    } catch (error) {
-                        console.error(`Erreur lors de la création de l'entrée:`, error);
-                        results.failed++;
-                        errors.push(`Erreur ligne ${i+1}: ${error.message}`);
+            // Détecter si la ligne commence par une date
+            const hasDate = this.lineStartsWithDate(line);
+
+            if (hasDate) {
+                // Si une entrée est en cours, l'ajouter au tableau des entrées traitées
+                if (currentEntry) {
+                    processedEntries.push(currentEntry);
+                }
+
+                // Essayer de parser la nouvelle ligne comme une entrée complète
+                try {
+                    const row = this.parseCsvLine(line, delimiter, fixMode);
+                    if (row) {
+                        currentEntry = row;
+                    } else {
+                        errors.push(`Erreur ligne ${lineNumber}: Format CSV invalide: ${line}`);
+                        currentEntry = null;
                     }
+                } catch (error) {
+                    errors.push(`Erreur ligne ${lineNumber}: ${error.message}`);
+                    currentEntry = null;
+                }
+            } else if (currentEntry) {
+                // Cette ligne est une continuation du commentaire
+                currentEntry.comment = currentEntry.comment
+                    ? `${currentEntry.comment}\n${line}`
+                    : line;
+            } else {
+                // Ligne sans date et sans entrée en cours
+                errors.push(`Erreur ligne ${lineNumber}: Pas de date détectée et aucune entrée précédente: ${line}`);
+            }
+        }
+
+        // Ajouter la dernière entrée si elle existe
+        if (currentEntry) {
+            processedEntries.push(currentEntry);
+        }
+
+        // Mettre à jour le total
+        results.total = processedEntries.length;
+
+        // Importer les entrées traitées
+        for (const entry of processedEntries) {
+            try {
+                const moodEntry = await this.createMoodEntryFromCsv(userId, entry);
+                if (moodEntry) {
+                    results.success++;
                 } else {
                     results.failed++;
-                    errors.push(`Erreur ligne ${i+1}: Format CSV invalide: ${line}`);
+                    errors.push(`Échec de création de l'entrée avec date: ${entry.date}`);
                 }
             } catch (error) {
-                console.error(`Erreur ligne ${i+1}:`, error);
                 results.failed++;
-                errors.push(`Erreur ligne ${i+1}: ${error.message}`);
+                errors.push(`Erreur lors de la création de l'entrée avec date ${entry.date}: ${error.message}`);
             }
         }
 
         return results;
+    }
+
+    /**
+     * Vérifie si une ligne commence par une date valide
+     */
+    private static lineStartsWithDate(line: string): boolean {
+        // Récupérer le premier segment qui pourrait être une date
+        const firstPart = line.split(',')[0].trim();
+
+        // Vérifier les formats de date connus
+        for (const pattern of datePatterns) {
+            if (pattern.regex.test(firstPart)) {
+                return true;
+            }
+        }
+
+        // Formats spécifiques pour les dates textuelles (français)
+        const joursSemaine = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+
+        for (const jour of joursSemaine) {
+            if (firstPart.toLowerCase().startsWith(jour)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -282,10 +274,21 @@ export class ImportService {
                 }
             }
 
-            const scoreMatch = line.match(/(\d+)\/10/) || line.match(/(\d+)/);
+            // Chercher aussi pour les jours de la semaine français
+            if (!dateMatch) {
+                const joursSemaine = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+                for (const jour of joursSemaine) {
+                    if (line.toLowerCase().startsWith(jour)) {
+                        dateMatch = [line.split(' ').slice(0, 4).join(' ')];
+                        break;
+                    }
+                }
+            }
+
+            const scoreMatch = line.match(/(\d+)\/10/) || line.match(/score\s*[:=]?\s*(\d+)/i) || line.match(/(\d+)/);
 
             if (dateMatch) {
-                const date = dateMatch[1];
+                const date = dateMatch[0];
                 const score = scoreMatch ? parseInt(scoreMatch[1]) : 5;
 
                 let commentStart = date.length;
@@ -339,6 +342,30 @@ export class ImportService {
                     return pattern.parse(match);
                 } catch (e) {
                     // Continuer avec le prochain pattern
+                }
+            }
+        }
+
+        // Chercher aussi pour les jours de la semaine français
+        const joursSemaine = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+        for (const jour of joursSemaine) {
+            if (dateStr.toLowerCase().startsWith(jour)) {
+                const parts = dateStr.split(' ');
+                if (parts.length >= 4) {
+                    const day = parseInt(parts[1], 10);
+                    const monthName = parts[2].toLowerCase();
+                    const year = parseInt(parts[3], 10);
+
+                    // Conversion des noms de mois en français
+                    const months: Record<string, number> = {
+                        'janvier': 0, 'février': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
+                        'juillet': 6, 'août': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11
+                    };
+
+                    const monthIndex = months[monthName];
+                    if (monthIndex !== undefined) {
+                        return new Date(year, monthIndex, day);
+                    }
                 }
             }
         }
@@ -399,6 +426,55 @@ export class ImportService {
             console.error('Erreur lors de la création de l\'entrée:', error);
             throw error;
         }
+    }
+
+    /**
+     * Extrait les émotions du texte du commentaire
+     * Utile lorsque les émotions ne sont pas explicitement indiquées
+     */
+    private static extractEmotionsFromText(text: string): string {
+        const emotions = [
+            'heureux', 'triste', 'anxieux', 'calme', 'énervé', 'stressé', 'content',
+            'fatigué', 'excité', 'déprimé', 'enthousiaste', 'irrité', 'nerveux',
+            'bien', 'mal', 'inquiet', 'serein', 'joyeux', 'confus', 'apaisé'
+        ];
+
+        const foundEmotions = emotions.filter(emotion =>
+            text.toLowerCase().includes(emotion)
+        );
+
+        return foundEmotions.join(', ');
+    }
+
+    /**
+     * Estime un score d'humeur à partir du texte du commentaire
+     * Utile lorsque le score n'est pas explicitement indiqué
+     */
+    private static estimateMoodFromText(text: string): number {
+        const positiveWords = [
+            'heureux', 'content', 'super', 'bien', 'cool', 'génial', 'excellent',
+            'incroyable', 'fantastique', 'top', 'joyeux', 'agréable', 'serein', 'calme'
+        ];
+
+        const negativeWords = [
+            'triste', 'déprimé', 'mal', 'anxieux', 'anxiété', 'stressé', 'fatigué',
+            'horrible', 'terrible', 'énervé', 'irrité', 'nerveux', 'inquiet', 'pire'
+        ];
+
+        text = text.toLowerCase();
+        let score = 5; // Score neutre par défaut
+
+        // Ajuster le score en fonction des mots présents
+        for (const word of positiveWords) {
+            if (text.includes(word)) score += 1;
+        }
+
+        for (const word of negativeWords) {
+            if (text.includes(word)) score -= 1;
+        }
+
+        // Limiter le score entre 0 et 10
+        return Math.max(0, Math.min(10, score));
     }
 }
 
