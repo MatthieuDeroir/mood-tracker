@@ -3,192 +3,276 @@ import { db } from "@/lib/db";
 import { moodEntries, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
-interface CSVRow {
+interface MoodCsvRow {
   date: string;
-  mood: string;
-  note?: string;
-  tags?: string;
-  sleepHours?: string;
-  medication?: string;
-  emotions?: string;
+  score: number;
+  sleepHours: number;
+  medication: number;
+  emotions: string;
+  comment: string;
 }
 
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  let i = 0;
-  
-  while (i < line.length) {
-    const char = line[i];
-    
-    if (char === '"' && !inQuotes) {
-      inQuotes = true;
-    } else if (char === '"' && inQuotes) {
-      if (i + 1 < line.length && line[i + 1] === '"') {
-        current += '"';
-        i++; // Skip next quote
-      } else {
-        inQuotes = false;
-      }
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-    i++;
-  }
-  
-  result.push(current.trim());
-  return result;
-}
-
-function parseFrenchDate(dateStr: string): Date | null {
-  // Remove day names and clean up
-  const cleaned = dateStr.replace(/^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+/i, '').trim();
-  
-  // Try different date formats
-  const formats = [
-    // DD mois YYYY
-    /(\d{1,2})\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(\d{4})/i,
-    // DD/MM/YYYY
-    /(\d{1,2})\/(\d{1,2})\/(\d{4})/,
-    // YYYY-MM-DD
-    /(\d{4})-(\d{1,2})-(\d{1,2})/
-  ];
-  
-  const monthNames = {
-    'janvier': 1, 'février': 2, 'mars': 3, 'avril': 4, 'mai': 5, 'juin': 6,
-    'juillet': 7, 'août': 8, 'septembre': 9, 'octobre': 10, 'novembre': 11, 'décembre': 12
+interface ImportResult {
+  success: boolean;
+  imported?: number;
+  errors?: number;
+  errorDetails?: string[];
+  error?: string;
+  preview?: {
+    totalLinesProcessed: number;
+    entriesFound: number;
+    sampleEntries: Array<{
+      date: string;
+      score: number;
+      comment: string;
+      lineNumber: number;
+    }>;
   };
-  
-  for (const format of formats) {
-    const match = cleaned.match(format);
+}
+
+// Formats de date supportés
+const datePatterns = [
+  // JJ/MM/AAAA
+  {
+    regex: /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
+    parse: (match: RegExpMatchArray) => {
+      const day = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const year = parseInt(match[3], 10);
+      return new Date(year, month, day);
+    }
+  },
+  // AAAA-MM-JJ
+  {
+    regex: /^(\d{4})-(\d{1,2})-(\d{1,2})$/,
+    parse: (match: RegExpMatchArray) => {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      return new Date(year, month, day);
+    }
+  },
+  // Format jour de la semaine DD mois AAAA (ex: "vendredi 27 juin 2025")
+  {
+    regex: /^(\w+)\s+(\d{1,2})\s+(\w+)\s+(\d{4})$/,
+    parse: (match: RegExpMatchArray) => {
+      const day = parseInt(match[2], 10);
+      const monthName = match[3].toLowerCase();
+      const year = parseInt(match[4], 10);
+
+      const months: Record<string, number> = {
+        'janvier': 0, 'février': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
+        'juillet': 6, 'août': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11
+      };
+
+      const monthIndex = months[monthName];
+      if (monthIndex !== undefined) {
+        return new Date(year, monthIndex, day);
+      }
+      throw new Error(`Mois inconnu: ${monthName}`);
+    }
+  }
+];
+
+// Fonction pour détecter si une ligne commence par une date
+function lineStartsWithDate(line: string): boolean {
+  const firstPart = line.split(',')[0].trim();
+
+  // Vérifier les formats de date connus
+  for (const pattern of datePatterns) {
+    if (pattern.regex.test(firstPart)) {
+      return true;
+    }
+  }
+
+  // Formats spécifiques pour les dates textuelles (français)
+  const joursSemaine = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+  for (const jour of joursSemaine) {
+    if (firstPart.toLowerCase().startsWith(jour)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Fonction pour parser une ligne CSV avec gestion des guillemets
+function parseCsvLine(line: string, delimiter: string = ','): MoodCsvRow | null {
+  let parts: string[] = [];
+
+  // Gestion des guillemets
+  if (line.includes('"')) {
+    let inQuotes = false;
+    let currentPart = '';
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === delimiter && !inQuotes) {
+        parts.push(currentPart);
+        currentPart = '';
+      } else {
+        currentPart += char;
+      }
+    }
+
+    parts.push(currentPart);
+  } else {
+    parts = line.split(delimiter);
+  }
+
+  // Nettoyer les parties
+  parts = parts.map(p => p.trim());
+
+  // Si on a moins de 6 parties mais au moins 2, compléter avec des valeurs par défaut
+  while (parts.length < 6) {
+    parts.push('');
+  }
+
+  return {
+    date: parts[0],
+    score: parseInt(parts[1], 10) || 5,
+    sleepHours: parseFloat(parts[2]) || 0,
+    medication: parseFloat(parts[3]) || 0,
+    emotions: parts[4] || '',
+    comment: parts[5] || ''
+  };
+}
+
+// Fonction pour parser une date dans différents formats
+function parseDate(dateStr: string): Date {
+  for (const pattern of datePatterns) {
+    const match = dateStr.match(pattern.regex);
     if (match) {
-      if (format === formats[0]) { // French format
-        const day = parseInt(match[1]);
-        const month = monthNames[match[2].toLowerCase() as keyof typeof monthNames];
-        const year = parseInt(match[3]);
-        return new Date(year, month - 1, day);
-      } else if (format === formats[1]) { // DD/MM/YYYY
-        const day = parseInt(match[1]);
-        const month = parseInt(match[2]);
-        const year = parseInt(match[3]);
-        return new Date(year, month - 1, day);
-      } else if (format === formats[2]) { // YYYY-MM-DD
-        const year = parseInt(match[1]);
-        const month = parseInt(match[2]);
-        const day = parseInt(match[3]);
-        return new Date(year, month - 1, day);
+      try {
+        return pattern.parse(match);
+      } catch (e) {
+        continue;
       }
     }
   }
-  
-  return null;
+
+  throw new Error(`Format de date non reconnu: ${dateStr}`);
+}
+
+// Fonction principale pour traiter le CSV avec gestion des commentaires multi-lignes
+function processCSVWithMultiline(csvContent: string): {
+  processedEntries: MoodCsvRow[];
+  errors: string[];
+  totalLinesProcessed: number;
+} {
+  const errors: string[] = [];
+  let lines = csvContent.replace(/\r/g, '').split('\n');
+
+  // Filtrer les lignes vides
+  lines = lines.filter(line => line.trim().length > 0);
+
+  let currentEntry: MoodCsvRow | null = null;
+  let lineNumber = 1; // Commencer à 1 pour l'en-tête
+  const processedEntries: MoodCsvRow[] = [];
+
+  // Traiter les lignes en tenant compte des commentaires multi-lignes
+  for (let i = 1; i < lines.length; i++) { // Commencer à 1 pour ignorer l'en-tête
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    lineNumber = i + 1;
+
+    // Détecter si la ligne commence par une date
+    const hasDate = lineStartsWithDate(line);
+
+    if (hasDate) {
+      // Si une entrée est en cours, l'ajouter au tableau des entrées traitées
+      if (currentEntry) {
+        processedEntries.push(currentEntry);
+      }
+
+      // Essayer de parser la nouvelle ligne comme une entrée complète
+      try {
+        const row = parseCsvLine(line);
+        if (row) {
+          currentEntry = row;
+        } else {
+          errors.push(`Erreur ligne ${lineNumber}: Format CSV invalide: ${line}`);
+          currentEntry = null;
+        }
+      } catch (error) {
+        errors.push(`Erreur ligne ${lineNumber}: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+        currentEntry = null;
+      }
+    } else if (currentEntry) {
+      // Cette ligne est une continuation du commentaire
+      currentEntry.comment = currentEntry.comment
+          ? `${currentEntry.comment}\n${line}`
+          : line;
+    } else {
+      // Ligne sans date et sans entrée en cours
+      errors.push(`Erreur ligne ${lineNumber}: Pas de date détectée et aucune entrée précédente: ${line}`);
+    }
+  }
+
+  // Ajouter la dernière entrée si elle existe
+  if (currentEntry) {
+    processedEntries.push(currentEntry);
+  }
+
+  return {
+    processedEntries,
+    errors,
+    totalLinesProcessed: lines.length
+  };
 }
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File;
+    const preview = formData.get("preview") === "true";
 
     if (!file) {
       return NextResponse.json(
-        { success: false, error: "No file uploaded" },
-        { status: 400 }
+          { success: false, error: "No file uploaded" },
+          { status: 400 }
       );
     }
 
-    const text = await file.text();
-    const lines = text.split('\n');
+    const csvContent = await file.text();
+    console.log(`📁 Fichier reçu: ${file.name} (${file.size} bytes)`);
 
-    if (lines.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "Empty file" },
-        { status: 400 }
-      );
+    // Traiter le CSV avec gestion des commentaires multi-lignes
+    const { processedEntries, errors, totalLinesProcessed } = processCSVWithMultiline(csvContent);
+
+    console.log(`📊 Analyse terminée:`);
+    console.log(`   - Lignes totales traitées: ${totalLinesProcessed}`);
+    console.log(`   - Entrées trouvées: ${processedEntries.length}`);
+    console.log(`   - Erreurs: ${errors.length}`);
+
+    // Mode preview : retourner les informations sans importer
+    if (preview) {
+      const sampleEntries = processedEntries.slice(0, 5).map((entry, index) => ({
+        date: entry.date,
+        score: entry.score,
+        comment: entry.comment.substring(0, 100) + (entry.comment.length > 100 ? '...' : ''),
+        lineNumber: index + 2 // +2 car on ignore l'en-tête et commence à 1
+      }));
+
+      return NextResponse.json({
+        success: true,
+        preview: {
+          totalLinesProcessed,
+          entriesFound: processedEntries.length,
+          sampleEntries
+        },
+        errorDetails: errors
+      });
     }
 
-    // Parse CSV with proper quote handling
-    const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
-    const rows: CSVRow[] = [];
-
-    let currentRow: string[] = [];
-    let inMultilineField = false;
-    let currentFieldIndex = 0;
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      
-      if (!inMultilineField) {
-        // Start of new row
-        currentRow = parseCSVLine(line);
-        
-        // Check if any field is incomplete (has opening quote but no closing quote)
-        let hasOpenQuote = false;
-        for (let j = 0; j < currentRow.length; j++) {
-          const field = currentRow[j];
-          if (field.startsWith('"') && !field.endsWith('"')) {
-            hasOpenQuote = true;
-            currentFieldIndex = j;
-            inMultilineField = true;
-            break;
-          }
-        }
-        
-        if (!hasOpenQuote && currentRow.length >= headers.length) {
-          // Complete row
-          const row: any = {};
-          headers.forEach((header, index) => {
-            if (index < currentRow.length) {
-              row[header] = currentRow[index].replace(/^"(.*)"$/, '$1');
-            }
-          });
-          rows.push(row);
-        }
-      } else {
-        // Continue multiline field
-        currentRow[currentFieldIndex] += '\n' + line;
-        if (line.includes('"')) {
-          inMultilineField = false;
-          // Process the completed row
-          const row: any = {};
-          headers.forEach((header, index) => {
-            if (index < currentRow.length) {
-              row[header] = currentRow[index].replace(/^"(.*)"$/, '$1');
-            }
-          });
-          rows.push(row);
-        }
-      }
-    }
-
-    // Map French headers to English
-    const headerMap: Record<string, string> = {
-      'date de l\'humeur': 'date',
-      'score de l\'humeur': 'mood',
-      'heures de sommeil': 'sleepHours',
-      'médicaments': 'medication',
-      'émotions': 'emotions',
-      'commentaire': 'note'
-    };
-
-    // Normalize headers
-    const normalizedHeaders = headers.map(h => headerMap[h] || h);
-    
-    // Validate required fields
-    const requiredFields = ['date', 'mood'];
-    const missingFields = requiredFields.filter(field => !normalizedHeaders.includes(field));
-    if (missingFields.length > 0) {
-      return NextResponse.json(
-        { success: false, error: `Missing required fields: ${missingFields.join(', ')}` },
-        { status: 400 }
-      );
-    }
-
-    // Get or create user
+    // Mode import : insérer en base de données
     const userEmail = "user@example.com";
+
+    // Ensure user exists
     let user = await db.select().from(users).where(eq(users.email, userEmail)).limit(1);
     if (user.length === 0) {
       const newUser = await db.insert(users).values({
@@ -198,68 +282,49 @@ export async function POST(request: NextRequest) {
       user = newUser;
     }
 
-    // Process and insert mood entries
-    const importedEntries = [];
-    const errors = [];
+    let imported = 0;
+    const importErrors: string[] = [...errors];
 
-    for (const [index, row] of rows.entries()) {
+    // Importer les entrées traitées
+    for (const entry of processedEntries) {
       try {
-        // Create normalized row with mapped headers
-        const normalizedRow: any = {};
-        headers.forEach((header, index) => {
-          const normalizedHeader = headerMap[header] || header;
-          normalizedRow[normalizedHeader] = row[header];
+        const date = parseDate(entry.date);
+
+        // Insérer en base
+        await db.insert(moodEntries).values({
+          userId: user[0].id,
+          mood: entry.score,
+          note: entry.comment || null,
+          tags: [], // Peut être étendu plus tard
+          sleepHours: entry.sleepHours > 0 ? entry.sleepHours : null,
+          medication: entry.medication > 0 ? entry.medication : null,
+          emotions: entry.emotions || null,
+          timestamp: date,
         });
 
-        // Parse date using French date parser
-        const date = parseFrenchDate(normalizedRow.date);
-        if (!date) {
-          errors.push(`Row ${index + 2}: Invalid date format: ${normalizedRow.date}`);
-          continue;
-        }
-
-        // Parse mood
-        const mood = parseInt(normalizedRow.mood);
-        if (isNaN(mood) || mood < 0 || mood > 10) {
-          errors.push(`Row ${index + 2}: Invalid mood value (must be 0-10): ${normalizedRow.mood}`);
-          continue;
-        }
-
-        // Parse optional fields
-        const tags = normalizedRow.tags ? normalizedRow.tags.split(';').map((t: string) => t.trim()).filter((t: string) => t) : [];
-        const sleepHours = normalizedRow.sleepHours ? parseFloat(normalizedRow.sleepHours) : null;
-        const medication = normalizedRow.medication ? parseFloat(normalizedRow.medication) : null;
-
-        // Insert mood entry
-        const newEntry = await db.insert(moodEntries).values({
-          userId: user[0].id,
-          mood,
-          note: normalizedRow.note || null,
-          tags,
-          sleepHours,
-          medication,
-          emotions: normalizedRow.emotions || null,
-          timestamp: date,
-        }).returning();
-
-        importedEntries.push(newEntry[0]);
+        imported++;
+        console.log(`✅ Importé: ${entry.date} - Score: ${entry.score}`);
       } catch (error) {
-        errors.push(`Row ${index + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const errorMsg = `Échec de l'import pour l'entrée ${entry.date}: ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
+        importErrors.push(errorMsg);
+        console.error(`❌ ${errorMsg}`);
       }
     }
 
+    console.log(`🎉 Import terminé: ${imported}/${processedEntries.length} entrées importées`);
+
     return NextResponse.json({
       success: true,
-      imported: importedEntries.length,
-      errors: errors.length,
-      errorDetails: errors,
+      imported,
+      errors: importErrors.length,
+      errorDetails: importErrors,
     });
 
   } catch (error) {
-    console.error("Error importing CSV:", error);
+    console.error("❌ Erreur générale d'import:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to process CSV file" },
-      { status: 500 }
+        { success: false, error: "Failed to process CSV file" },
+        { status: 500 }
     );
   }
 }

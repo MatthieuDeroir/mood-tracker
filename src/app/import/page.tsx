@@ -13,18 +13,77 @@ interface ImportResult {
   errors?: number;
   errorDetails?: string[];
   error?: string;
+  preview?: {
+    totalLinesProcessed: number;
+    entriesFound: number;
+    sampleEntries: Array<{
+      date: string;
+      score: number;
+      comment: string;
+      lineNumber: number;
+    }>;
+  };
 }
 
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [previewResult, setPreviewResult] = useState<ImportResult | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const addLog = (message: string) => {
+    setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
       setResult(null);
+      setPreviewResult(null);
+      setLogs([]);
+      addLog(`Fichier sélectionné: ${selectedFile.name} (${selectedFile.size} bytes)`);
+    }
+  };
+
+  const handlePreview = async () => {
+    if (!file) return;
+
+    setPreviewing(true);
+    setPreviewResult(null);
+    addLog("🔍 Démarrage de l'analyse du fichier...");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("preview", "true");
+
+      const response = await fetch("/api/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      setPreviewResult(data);
+
+      if (data.success && data.preview) {
+        addLog(`📊 Analyse terminée: ${data.preview.entriesFound} entrées trouvées sur ${data.preview.totalLinesProcessed} lignes`);
+        if (data.errorDetails && data.errorDetails.length > 0) {
+          addLog(`⚠️  ${data.errorDetails.length} erreurs détectées`);
+        }
+      } else {
+        addLog(`❌ Erreur d'analyse: ${data.error || 'Erreur inconnue'}`);
+      }
+    } catch (error) {
+      addLog(`❌ Erreur réseau: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      setPreviewResult({
+        success: false,
+        error: "Erreur lors de l'analyse du fichier",
+      });
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -33,6 +92,7 @@ export default function ImportPage() {
 
     setLoading(true);
     setResult(null);
+    addLog("🚀 Démarrage de l'import...");
 
     try {
       const formData = new FormData();
@@ -45,10 +105,20 @@ export default function ImportPage() {
 
       const data = await response.json();
       setResult(data);
+
+      if (data.success) {
+        addLog(`✅ Import terminé avec succès: ${data.imported} entrées importées`);
+        if (data.errors && data.errors > 0) {
+          addLog(`⚠️  ${data.errors} erreurs rencontrées`);
+        }
+      } else {
+        addLog(`❌ Erreur d'import: ${data.error || 'Erreur inconnue'}`);
+      }
     } catch (error) {
+      addLog(`❌ Erreur réseau: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
       setResult({
         success: false,
-        error: "Failed to upload file",
+        error: "Erreur lors de l'upload du fichier",
       });
     } finally {
       setLoading(false);
@@ -56,12 +126,14 @@ export default function ImportPage() {
   };
 
   const downloadTemplate = () => {
-    const csvContent = `date,mood,note,tags,sleepHours,medication,emotions
-2024-01-15,7,"Bonne journée au travail",work;friends,8.5,0,calme;joyeux
-2024-01-16,5,"Jour normal",,,7.0,0.5,neutre
-2024-01-17,8,"Sortie avec des amis",friends;exercise,8.0,0,heureux;energique`;
+    const csvContent = `Date de l'humeur,Score de l'humeur,Heures de sommeil,médicaments,émotions,commentaire
+"vendredi 27 juin 2025",7,8.5,0,joyeux,"Très bonne journée au travail.
+Réunion productive avec l'équipe."
+"samedi 28 juin 2025",8,9.0,0,relaxé,"Week-end détente.
+Balade en forêt."
+"dimanche 29 juin 2025",6,7.5,0.5,fatigué,"Dimanche calme mais un peu fatigué."`;
 
-    const blob = new Blob([csvContent], { type: "text/csv" });
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -71,145 +143,250 @@ export default function ImportPage() {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-center mb-4">📊 Mood Tracker</h1>
-        <nav className="flex justify-center space-x-4">
-          <Link href="/">
-            <Button variant="outline">Dashboard</Button>
-          </Link>
-          <Link href="/analytics">
-            <Button variant="outline">Analytics</Button>
-          </Link>
-          <Button variant="default">Import</Button>
-        </nav>
-      </header>
+      <div className="container mx-auto p-4 max-w-4xl">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-center mb-4">📊 Mood Tracker</h1>
+          <nav className="flex justify-center space-x-4">
+            <Link href="/">
+              <Button variant="outline">Dashboard</Button>
+            </Link>
+            <Link href="/analytics">
+              <Button variant="outline">Analytics</Button>
+            </Link>
+            <Button variant="default">Import</Button>
+          </nav>
+        </header>
 
-      <main className="grid gap-6">
-        {/* Import Instructions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Import de données CSV</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="font-semibold">Format requis:</h3>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• <strong>date</strong> (requis): Format YYYY-MM-DD ou DD/MM/YYYY</li>
-                <li>• <strong>mood</strong> (requis): Nombre de 0 à 10</li>
-                <li>• <strong>note</strong> (optionnel): Texte libre</li>
-                <li>• <strong>tags</strong> (optionnel): Séparés par des points-virgules (ex: work;friends)</li>
-                <li>• <strong>sleepHours</strong> (optionnel): Nombre décimal (ex: 8.5)</li>
-                <li>• <strong>medication</strong> (optionnel): Nombre décimal</li>
-                <li>• <strong>emotions</strong> (optionnel): Texte libre</li>
-              </ul>
-            </div>
-
-            <div className="flex gap-4">
-              <Button 
-                variant="outline" 
-                onClick={downloadTemplate}
-                className="flex-1"
-              >
-                📁 Télécharger le template
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* File Upload */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Upload fichier CSV</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Input
-                type="file"
-                accept=".csv"
-                onChange={handleFileChange}
-                disabled={loading}
-              />
-              {file && (
-                <p className="text-sm text-muted-foreground">
-                  Fichier sélectionné: {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                </p>
-              )}
-            </div>
-
-            <Button 
-              onClick={handleImport}
-              disabled={!file || loading}
-              className="w-full"
-            >
-              {loading ? "Import en cours..." : "Importer les données"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Results */}
-        {result && (
+        <main className="grid gap-6">
+          {/* File Upload */}
           <Card>
             <CardHeader>
-              <CardTitle>Résultats de l'import</CardTitle>
+              <CardTitle>📁 Importer des données CSV</CardTitle>
             </CardHeader>
-            <CardContent>
-              {result.success ? (
-                <div className="space-y-4">
-                  <div className="flex gap-4">
-                    <Badge variant="secondary" className="text-green-600">
-                      ✅ {result.imported} entrées importées
-                    </Badge>
-                    {result.errors && result.errors > 0 && (
-                      <Badge variant="destructive">
-                        ❌ {result.errors} erreurs
-                      </Badge>
-                    )}
-                  </div>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="file" className="block text-sm font-medium">
+                  Sélectionner un fichier CSV
+                </label>
+                <Input
+                    id="file"
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileChange}
+                    className="cursor-pointer"
+                />
+              </div>
 
-                  {result.errorDetails && result.errorDetails.length > 0 && (
-                    <div className="space-y-2">
-                      <h4 className="font-semibold">Détails des erreurs:</h4>
-                      <div className="bg-red-50 p-3 rounded border">
-                        {result.errorDetails.map((error, index) => (
-                          <p key={index} className="text-sm text-red-600">
-                            {error}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Badge variant="destructive">
-                    ❌ Échec de l'import
-                  </Badge>
-                  <p className="text-sm text-red-600">
-                    {result.error}
-                  </p>
-                </div>
+              <div className="flex gap-2">
+                <Button
+                    onClick={handlePreview}
+                    disabled={!file || previewing}
+                    variant="outline"
+                >
+                  {previewing ? "Analyse en cours..." : "🔍 Analyser"}
+                </Button>
+
+                <Button
+                    onClick={handleImport}
+                    disabled={!file || loading || !previewResult?.success}
+                    variant="default"
+                >
+                  {loading ? "Import en cours..." : "📤 Importer"}
+                </Button>
+
+                <Button onClick={downloadTemplate} variant="outline">
+                  📥 Télécharger le template
+                </Button>
+              </div>
+
+              {!previewResult?.success && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      🔍 Analysez d'abord votre fichier pour vérifier qu'il sera correctement importé.
+                    </p>
+                  </div>
               )}
             </CardContent>
           </Card>
-        )}
 
-        {/* Tips */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Conseils</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="text-sm text-muted-foreground space-y-2">
-              <li>• Utilisez le template fourni pour éviter les erreurs de format</li>
-              <li>• Les dates peuvent être au format DD/MM/YYYY ou YYYY-MM-DD</li>
-              <li>• Seules les colonnes "date" et "mood" sont obligatoires</li>
-              <li>• Les tags multiples doivent être séparés par des points-virgules</li>
-              <li>• Le fichier doit être encodé en UTF-8</li>
-            </ul>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+          {/* Preview Results */}
+          {previewResult && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    {previewResult.success ? "📊 Aperçu de l'analyse" : "❌ Erreur d'analyse"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {previewResult.success && previewResult.preview ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="text-center">
+                            <p className="text-sm text-muted-foreground">Lignes traitées</p>
+                            <p className="text-2xl font-bold">{previewResult.preview.totalLinesProcessed}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm text-muted-foreground">Entrées trouvées</p>
+                            <p className="text-2xl font-bold text-green-600">{previewResult.preview.entriesFound}</p>
+                          </div>
+                        </div>
+
+                        {previewResult.preview.sampleEntries.length > 0 && (
+                            <div>
+                              <h4 className="font-medium mb-2">Échantillon des entrées détectées:</h4>
+                              <div className="space-y-2">
+                                {previewResult.preview.sampleEntries.map((entry, index) => (
+                                    <div key={index} className="p-2 bg-gray-50 rounded text-sm">
+                                      <div className="flex justify-between items-start">
+                                        <div>
+                                          <span className="font-medium">{entry.date}</span>
+                                          <Badge variant="outline" className="ml-2">Score: {entry.score}</Badge>
+                                        </div>
+                                        <Badge variant="secondary">Ligne {entry.lineNumber}</Badge>
+                                      </div>
+                                      {entry.comment && (
+                                          <p className="text-gray-600 mt-1">{entry.comment}</p>
+                                      )}
+                                    </div>
+                                ))}
+                              </div>
+                            </div>
+                        )}
+
+                        {previewResult.preview.entriesFound !== previewResult.preview.totalLinesProcessed - 1 && (
+                            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                              <p className="text-sm text-yellow-800">
+                                ⚠️ Attention: {previewResult.preview.totalLinesProcessed - 1} lignes dans le fichier mais seulement {previewResult.preview.entriesFound} entrées détectées.
+                                Cela peut être dû à des commentaires sur plusieurs lignes (ce qui est normal) ou à des erreurs de format.
+                              </p>
+                            </div>
+                        )}
+                      </div>
+                  ) : (
+                      <div className="text-red-600">
+                        <p>{previewResult.error || "Erreur inconnue"}</p>
+                      </div>
+                  )}
+                </CardContent>
+              </Card>
+          )}
+
+          {/* Import Results */}
+          {result && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    {result.success ? "✅ Résultats de l'import" : "❌ Erreur d'import"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {result.success ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="text-center">
+                            <p className="text-sm text-muted-foreground">Importées</p>
+                            <p className="text-2xl font-bold text-green-600">{result.imported}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm text-muted-foreground">Erreurs</p>
+                            <p className="text-2xl font-bold text-red-600">{result.errors}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-center">
+                          <Link href="/analytics">
+                            <Button>Voir les analyses</Button>
+                          </Link>
+                        </div>
+                      </div>
+                  ) : (
+                      <div className="text-red-600">
+                        <p>{result.error || "Erreur inconnue"}</p>
+                      </div>
+                  )}
+                </CardContent>
+              </Card>
+          )}
+
+          {/* Error Details */}
+          {(result?.errorDetails || previewResult?.errorDetails) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>🔍 Détails des erreurs</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-60 overflow-y-auto space-y-1">
+                    {(result?.errorDetails || previewResult?.errorDetails || []).map((error, index) => (
+                        <div key={index} className="p-2 bg-red-50 text-red-700 rounded text-sm">
+                          {error}
+                        </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+          )}
+
+          {/* Logs */}
+          {logs.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>📋 Logs d'import</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-60 overflow-y-auto space-y-1">
+                    {logs.map((log, index) => (
+                        <div key={index} className="p-2 bg-gray-50 rounded text-sm font-mono">
+                          {log}
+                        </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+          )}
+
+          {/* Format Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>📝 Format CSV supporté</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-medium mb-2">Colonnes supportées:</h4>
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    <li><strong>Date de l'humeur</strong> (requis): DD/MM/YYYY, YYYY-MM-DD, ou "jour DD mois YYYY"</li>
+                    <li><strong>Score de l'humeur</strong> (requis): Nombre de 0 à 10</li>
+                    <li><strong>Heures de sommeil</strong> (optionnel): Nombre décimal (ex: 8.5)</li>
+                    <li><strong>Médicaments</strong> (optionnel): Nombre décimal</li>
+                    <li><strong>Émotions</strong> (optionnel): Texte libre</li>
+                    <li><strong>Commentaire</strong> (optionnel): Texte libre, peut s'étendre sur plusieurs lignes</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-2">Fonctionnalités avancées:</h4>
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    <li>✅ Gestion des commentaires sur plusieurs lignes</li>
+                    <li>✅ Détection automatique des formats de date français</li>
+                    <li>✅ Gestion des guillemets dans les champs</li>
+                    <li>✅ Rapport détaillé des erreurs d'import</li>
+                    <li>✅ Mode prévisualisation avant import</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-2">Exemple de format:</h4>
+                  <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto">
+{`Date de l'humeur,Score de l'humeur,Heures de sommeil,médicaments,émotions,commentaire
+"vendredi 27 juin 2025",7,8.5,0,joyeux,"Très bonne journée.
+Réunion productive."
+"28/06/2025",8,9.0,0,relaxé,"Week-end détente"`}
+                </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
   );
 }
