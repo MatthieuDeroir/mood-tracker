@@ -200,8 +200,8 @@ Balade en forêt."
               </div>
 
               {!previewResult?.success && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                    <p className="text-sm text-blue-800">
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-md">
+                    <p className="text-sm text-blue-600 dark:text-blue-400">
                       🔍 Analysez d'abord votre fichier pour vérifier qu'il sera correctement importé.
                     </p>
                   </div>
@@ -227,7 +227,7 @@ Balade en forêt."
                           </div>
                           <div className="text-center">
                             <p className="text-sm text-muted-foreground">Entrées trouvées</p>
-                            <p className="text-2xl font-bold text-green-600">{previewResult.preview.entriesFound}</p>
+                            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{previewResult.preview.entriesFound}</p>
                           </div>
                         </div>
 
@@ -236,7 +236,7 @@ Balade en forêt."
                               <h4 className="font-medium mb-2">Échantillon des entrées détectées:</h4>
                               <div className="space-y-2">
                                 {previewResult.preview.sampleEntries.map((entry, index) => (
-                                    <div key={index} className="p-2 bg-gray-50 rounded text-sm">
+                                    <div key={index} className="p-2 bg-muted rounded text-sm">
                                       <div className="flex justify-between items-start">
                                         <div>
                                           <span className="font-medium">{entry.date}</span>
@@ -245,7 +245,7 @@ Balade en forêt."
                                         <Badge variant="secondary">Ligne {entry.lineNumber}</Badge>
                                       </div>
                                       {entry.comment && (
-                                          <p className="text-gray-600 mt-1">{entry.comment}</p>
+                                          <p className="text-muted-foreground mt-1">{entry.comment}</p>
                                       )}
                                     </div>
                                 ))}
@@ -254,8 +254,8 @@ Balade en forêt."
                         )}
 
                         {previewResult.preview.entriesFound !== previewResult.preview.totalLinesProcessed - 1 && (
-                            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                              <p className="text-sm text-yellow-800">
+                            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
+                              <p className="text-sm text-yellow-600 dark:text-yellow-400">
                                 ⚠️ Attention: {previewResult.preview.totalLinesProcessed - 1} lignes dans le fichier mais seulement {previewResult.preview.entriesFound} entrées détectées.
                                 Cela peut être dû à des commentaires sur plusieurs lignes (ce qui est normal) ou à des erreurs de format.
                               </p>
@@ -263,7 +263,7 @@ Balade en forêt."
                         )}
                       </div>
                   ) : (
-                      <div className="text-red-600">
+                      <div className="text-red-600 dark:text-red-400">
                         <p>{previewResult.error || "Erreur inconnue"}</p>
                       </div>
                   )}
@@ -285,11 +285,11 @@ Balade en forêt."
                         <div className="grid grid-cols-2 gap-4">
                           <div className="text-center">
                             <p className="text-sm text-muted-foreground">Importées</p>
-                            <p className="text-2xl font-bold text-green-600">{result.imported}</p>
+                            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{result.imported}</p>
                           </div>
                           <div className="text-center">
                             <p className="text-sm text-muted-foreground">Erreurs</p>
-                            <p className="text-2xl font-bold text-red-600">{result.errors}</p>
+                            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{result.errors}</p>
                           </div>
                         </div>
 
@@ -300,7 +300,7 @@ Balade en forêt."
                         </div>
                       </div>
                   ) : (
-                      <div className="text-red-600">
+                      <div className="text-red-600 dark:text-red-400">
                         <p>{result.error || "Erreur inconnue"}</p>
                       </div>
                   )}
@@ -317,7 +317,7 @@ Balade en forêt."
                 <CardContent>
                   <div className="max-h-60 overflow-y-auto space-y-1">
                     {(result?.errorDetails || previewResult?.errorDetails || []).map((error, index) => (
-                        <div key={index} className="p-2 bg-red-50 text-red-700 rounded text-sm">
+                        <div key={index} className="p-2 bg-red-500/10 text-red-600 dark:text-red-400 rounded text-sm">
                           {error}
                         </div>
                     ))}
@@ -335,7 +335,7 @@ Balade en forêt."
                 <CardContent>
                   <div className="max-h-60 overflow-y-auto space-y-1">
                     {logs.map((log, index) => (
-                        <div key={index} className="p-2 bg-gray-50 rounded text-sm font-mono">
+                        <div key={index} className="p-2 bg-muted rounded text-sm font-mono">
                           {log}
                         </div>
                     ))}
@@ -376,7 +376,7 @@ Balade en forêt."
 
                 <div>
                   <h4 className="font-medium mb-2">Exemple de format:</h4>
-                  <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto">
+                  <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
 {`Date de l'humeur,Score de l'humeur,Heures de sommeil,médicaments,émotions,commentaire
 "vendredi 27 juin 2025",7,8.5,0,joyeux,"Très bonne journée.
 Réunion productive."
