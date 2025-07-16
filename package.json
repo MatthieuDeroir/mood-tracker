@@ -34,7 +34,6 @@
     "radix-ui": "^1.4.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-tabs": "link:@radix-ui/react-tabs",
     "recharts": "^3.1.0",
     "tailwind-merge": "^3.3.1"
   },
