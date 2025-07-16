@@ -1,79 +1,39 @@
-import {
-  pgTable,
-  uuid,
-  varchar,
-  text,
-  timestamp,
-  integer,
-  jsonb,
-  index,
-  real,
-} from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+// src/lib/db/schema.ts
+import { pgTable, uuid, varchar, integer, text, jsonb, real, timestamp, check } from 'drizzle-orm/pg-core';
+import { createId } from '@paralleldrive/cuid2';
 
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: varchar("email", { length: 255 }).notNull().unique(),
-  name: varchar("name", { length: 255 }).notNull(),
-  settings: jsonb("settings")
-    .$type<{
-      timezone: string;
-      moodLabels: Record<number, string>;
-      language?: string;
-    }>()
-    .notNull()
-    .default({
-      timezone: "Europe/Paris",
-      moodLabels: {
-        0: "Terrible",
-        1: "Très mal",
-        2: "Mal",
-        3: "Pas bien",
-        4: "Faible",
-        5: "Neutre",
-        6: "Correct",
-        7: "Bien",
-        8: "Très bien",
-        9: "Super",
-        10: "Incroyable",
-      },
-    }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().default('gen_random_uuid()'),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  name: varchar('name', { length: 255 }),
+  settings: jsonb('settings').default({}),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-export const moodEntries = pgTable("mood_entries", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id),
-  mood: integer("mood").notNull(),
-  note: text("note"),
-  tags: jsonb("tags").$type<string[]>().notNull().default([]),
-  sleepHours: real("sleep_hours"),
-  medication: real("medication"),
-  emotions: text("emotions"),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => {
-  return {
-    userTimestampIdx: index("user_timestamp_idx").on(table.userId, table.timestamp),
-    timestampIdx: index("timestamp_idx").on(table.timestamp),
-  };
-});
+export const moodEntries = pgTable('mood_entries', {
+  id: uuid('id').primaryKey().default('gen_random_uuid()'),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
 
-export const usersRelations = relations(users, ({ many }) => ({
-  moods: many(moodEntries),
+  // Mesure principale (obligatoire)
+  mood: integer('mood').notNull(),
+
+  // Données complémentaires optionnelles
+  note: text('note'),
+  tags: jsonb('tags').$type<string[]>().default([]),
+  sleepHours: real('sleep_hours'),
+  medication: real('medication'),
+  emotions: text('emotions'),
+
+  // Métadonnées
+  timestamp: timestamp('timestamp').notNull().defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  moodCheck: check('mood_check', 'mood >= 0 AND mood <= 10'),
 }));
 
-export const moodEntriesRelations = relations(moodEntries, ({ one }) => ({
-  user: one(users, {
-    fields: [moodEntries.userId],
-    references: [users.id],
-  }),
-}));
-
+// Types TypeScript dérivés
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type MoodEntry = typeof moodEntries.$inferSelect;
