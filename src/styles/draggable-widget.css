@@ -1,0 +1,110 @@
+/* Draggable Widget Styles */
+
+.draggable-widget {
+  position: relative;
+  animation-name: fadeIn;
+  animation-duration: 0.5s;
+  animation-timing-function: ease-out;
+  background-image: linear-gradient(to bottom right, hsl(var(--card)), hsl(var(--card) / 0.95));
+  border: 1px solid hsl(var(--border));
+  box-shadow: var(--shadow-md);
+  /* Modified transition to exclude transform properties to avoid conflicts with react-grid-layout */
+  transition: box-shadow 300ms, background-color 300ms, border-color 300ms;
+}
+
+.draggable-widget:hover {
+  /* Removed transform and scale to avoid conflicts with react-grid-layout */
+  box-shadow: var(--shadow-lg);
+}
+
+.draggable-widget.favorite {
+  ring: 2px;
+  ring-color: hsl(var(--primary) / 0.2);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Removed drag indicator styles to avoid conflicts with react-grid-layout */
+
+/* Widget Controls */
+.widget-controls {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
+  /* Modified transition to exclude transform properties to avoid conflicts with react-grid-layout */
+  transition: opacity 300ms, background-color 300ms;
+}
+
+.editing .widget-controls {
+  opacity: 1;
+}
+
+.widget-controls-container {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: hsl(var(--card) / 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-lg);
+  border: 1px solid hsl(var(--border));
+  box-shadow: var(--shadow-lg);
+}
+
+/* Widget Header */
+.widget-header {
+  padding-bottom: 1rem;
+  padding-top: 3rem;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+.widget-title {
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: hsl(var(--foreground));
+  pointer-events: none;
+}
+
+.widget-title-indicator {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  transition: background-color 200ms;
+}
+
+.widget-title-indicator.favorite {
+  background-color: hsl(48, 100%, 67%); /* yellow-500 */
+}
+
+.widget-title-indicator.default {
+  background-color: hsl(var(--primary));
+}
+
+.widget-title-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+/* Widget Content */
+.widget-content {
+  padding-top: 0;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+/* Gradient overlay for depth */
+.widget-gradient-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to bottom right, transparent, transparent, hsl(var(--primary) / 0.05));
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+}
+
+/* Removed resize indicator styles to avoid conflicts with react-grid-layout */

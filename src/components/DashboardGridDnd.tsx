@@ -1,16 +1,28 @@
 "use client";
 
-import React, { useMemo } from 'react';
-import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
-import 'react-grid-layout/css/styles.css';
-import 'react-resizable/css/styles.css';
-import '@/styles/grid-layout.css';
-import '@/styles/dashboard-grid.css';
-import '@/styles/animations.css';
+import React, { useState, useMemo } from 'react';
 import { useDashboard } from '@/contexts/DashboardContext';
 import { DraggableWidget } from '@/components/DraggableWidget';
+import { SortableWidget } from '@/components/SortableWidget';
 import { MetricsSelector } from '@/components/MetricsSelector';
 import { MetricsTable } from '@/components/MetricsTable';
+import { Button } from '@/components/ui/button';
+import {
+  DndContext, 
+  DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
+  useSensor,
+  useSensors,
+  PointerSensor,
+  KeyboardSensor,
+  closestCenter
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
 import {
   LineChart,
   Line,
@@ -34,9 +46,6 @@ import {
   PolarRadiusAxis,
   Radar
 } from 'recharts';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   TrendingUp,
   TrendingDown,
@@ -52,7 +61,9 @@ import {
   Brain
 } from 'lucide-react';
 
-const ResponsiveGridLayout = WidthProvider(Responsive);
+import '@/styles/grid-layout.css';
+import '@/styles/dashboard-grid.css';
+import '@/styles/animations.css';
 
 // Mock data for charts
 const generateSampleData = () => {
@@ -140,8 +151,9 @@ const generateRadarData = () => {
   }));
 };
 
-export function DashboardGrid() {
+export function DashboardGridDnd() {
   const { state, dispatch } = useDashboard();
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   const chartData = useMemo(() => generateSampleData(), []);
   const weeklyData = useMemo(() => generateWeeklyData(), []);
@@ -167,41 +179,38 @@ export function DashboardGrid() {
     { type: "insight", message: "Meilleure humeur après 8h de sommeil", confidence: 88 }
   ];
 
-  const handleLayoutChange = (layout: Layout[]) => {
-    // Save all layout changes immediately
-    layout.forEach(item => {
-      const widget = state.widgets.find(w => w.id === item.i);
-      if (widget) {
-        // Only update if something changed
-        if (widget.x !== item.x || widget.y !== item.y || widget.w !== item.w || widget.h !== item.h) {
-          console.log(`Widget ${item.i} layout changed: x=${item.x}, y=${item.y}, w=${item.w}, h=${item.h}`);
-          dispatch({
-            type: 'UPDATE_WIDGET_LAYOUT',
-            payload: {
-              id: item.i,
-              x: item.x,
-              y: item.y,
-              w: item.w,
-              h: item.h
-            }
-          });
-        }
-      }
-    });
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor)
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
   };
 
-  const layouts = {
-    lg: state.widgets.map(widget => ({
-      i: widget.id,
-      x: widget.x,
-      y: widget.y,
-      w: widget.w,
-      h: widget.h,
-      minW: widget.minW,
-      minH: widget.minH,
-      maxW: widget.maxW,
-      maxH: widget.maxH,
-    })),
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = state.widgets.findIndex(w => w.id === active.id);
+      const newIndex = state.widgets.findIndex(w => w.id === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newWidgets = arrayMove(state.widgets, oldIndex, newIndex);
+
+        // Update the widgets in the context
+        dispatch({
+          type: 'LOAD_LAYOUT',
+          payload: newWidgets
+        });
+      }
+    }
+
+    setActiveId(null);
   };
 
   const renderWidget = (widget: any) => {
@@ -214,7 +223,7 @@ export function DashboardGrid() {
     switch (widget.type) {
       case 'stats-cards':
         return (
-          <DraggableWidget key={widget.id} {...commonProps}>
+          <SortableWidget key={widget.id} {...commonProps}>
             <div className="grid grid-cols-3 lg:grid-cols-7 gap-4">
               {[
                 { label: 'Humeur', value: stats.avgMood, icon: Smile, trend: stats.moodTrend, color: 'hsl(var(--chart-1))', bgColor: 'from-chart-1/10 to-chart-1/5' },
@@ -225,35 +234,35 @@ export function DashboardGrid() {
                 { label: 'Social', value: 7.1, icon: Users, trend: 7, color: 'hsl(var(--primary))', bgColor: 'from-primary/10 to-primary/5' },
                 { label: 'Entrées', value: stats.totalEntries, icon: Activity, trend: 18, color: 'hsl(var(--accent))', bgColor: 'from-accent/10 to-accent/5' }
               ].map((stat, index) => (
-                <Card 
+                <div 
                   key={index} 
-                  className={`bg-gradient-to-br ${stat.bgColor} border-0 shadow-sm hover-lift transition-all duration-300 group cursor-default`}
+                  className={`stat-card stat-card-${stat.label.toLowerCase()} group`}
                   style={{ animationDelay: `${index * 100}ms` }}
                 >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  <div className="stat-card-content">
+                    <div className="stat-card-header">
+                      <span className="stat-card-label">
                         {stat.label}
                       </span>
-                      <stat.icon className="w-4 h-4 transition-transform group-hover:scale-110" style={{ color: stat.color }} />
+                      <stat.icon className="stat-card-icon" style={{ color: stat.color }} />
                     </div>
-                    <div className="mb-3">
-                      <span className="text-2xl font-bold text-foreground">{stat.value}</span>
+                    <div className="stat-card-value">
+                      <span>{stat.value}</span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs font-medium" style={{ color: stat.color }}>
+                    <div className="stat-card-trend" style={{ color: stat.color }}>
                       {stat.trend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                       <span>{Math.abs(stat.trend)}% ce mois</span>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))}
             </div>
-          </DraggableWidget>
+          </SortableWidget>
         );
 
       case 'mood-trend':
         return (
-          <DraggableWidget key={widget.id} {...commonProps}>
+          <SortableWidget key={widget.id} {...commonProps}>
             <div className="mb-4">
               <MetricsSelector variant="compact" showTitle={false} />
             </div>
@@ -292,12 +301,12 @@ export function DashboardGrid() {
                 )}
               </LineChart>
             </ResponsiveContainer>
-          </DraggableWidget>
+          </SortableWidget>
         );
 
       case 'weekly-summary':
         return (
-          <DraggableWidget key={widget.id} {...commonProps}>
+          <SortableWidget key={widget.id} {...commonProps}>
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={weeklyData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -315,12 +324,12 @@ export function DashboardGrid() {
                 <Bar dataKey="mood" fill="#8b5cf6" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </DraggableWidget>
+          </SortableWidget>
         );
 
       case 'tags-distribution':
         return (
-          <DraggableWidget key={widget.id} {...commonProps}>
+          <SortableWidget key={widget.id} {...commonProps}>
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
@@ -346,12 +355,12 @@ export function DashboardGrid() {
                 />
               </PieChart>
             </ResponsiveContainer>
-          </DraggableWidget>
+          </SortableWidget>
         );
 
       case 'radar-chart':
         return (
-          <DraggableWidget key={widget.id} {...commonProps}>
+          <SortableWidget key={widget.id} {...commonProps}>
             <ResponsiveContainer width="100%" height={200}>
               <RadarChart data={radarData}>
                 <PolarGrid stroke="hsl(var(--border))" />
@@ -367,12 +376,12 @@ export function DashboardGrid() {
                 />
               </RadarChart>
             </ResponsiveContainer>
-          </DraggableWidget>
+          </SortableWidget>
         );
 
       case 'correlation-chart':
         return (
-          <DraggableWidget key={widget.id} {...commonProps}>
+          <SortableWidget key={widget.id} {...commonProps}>
             <ResponsiveContainer width="100%" height={200}>
               <ScatterChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -390,12 +399,12 @@ export function DashboardGrid() {
                 <Scatter dataKey="mood" fill="#10b981" />
               </ScatterChart>
             </ResponsiveContainer>
-          </DraggableWidget>
+          </SortableWidget>
         );
 
       case 'patterns':
         return (
-          <DraggableWidget key={widget.id} {...commonProps}>
+          <SortableWidget key={widget.id} {...commonProps}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {patterns.map((pattern, index) => (
                 <div key={index} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
@@ -412,23 +421,23 @@ export function DashboardGrid() {
                 </div>
               ))}
             </div>
-          </DraggableWidget>
+          </SortableWidget>
         );
 
       case 'metrics-table':
         return (
-          <DraggableWidget key={widget.id} {...commonProps}>
+          <SortableWidget key={widget.id} {...commonProps}>
             <div className="h-full">
               <MetricsTable />
             </div>
-          </DraggableWidget>
+          </SortableWidget>
         );
 
       default:
         return (
-          <DraggableWidget key={widget.id} {...commonProps}>
+          <SortableWidget key={widget.id} {...commonProps}>
             <div>Widget content for {widget.type}</div>
-          </DraggableWidget>
+          </SortableWidget>
         );
     }
   };
@@ -480,25 +489,26 @@ export function DashboardGrid() {
           )}
         </div>
       </div>
-      <ResponsiveGridLayout
-        className={`layout ${state.isEditing ? 'editing' : ''}`}
-        layouts={layouts}
-        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-        cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
-        rowHeight={state.rowHeight}
-        onLayoutChange={handleLayoutChange}
-        isDraggable={true}
-        isResizable={true}
-        margin={[12, 12]}
-        containerPadding={[0, 0]}
-        useCSSTransforms={true}
-        preventCollision={false}
-        autoSize={true}
-        compactType="vertical"
-        allowOverlap={false}
-      >
-        {state.widgets.filter(w => w.isVisible).map(renderWidget)}
-      </ResponsiveGridLayout>
+
+      <div className="grid grid-cols-12 gap-4">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext 
+            items={state.widgets.filter(w => w.isVisible).map(w => w.id)}
+            strategy={rectSortingStrategy}
+          >
+            {state.widgets.filter(w => w.isVisible).map(renderWidget)}
+          </SortableContext>
+
+          <DragOverlay>
+            {activeId ? renderWidget(state.widgets.find(w => w.id === activeId)) : null}
+          </DragOverlay>
+        </DndContext>
+      </div>
     </div>
   );
 }

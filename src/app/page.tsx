@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { DashboardProvider, useDashboard } from "@/contexts/DashboardContext";
-import { DashboardGrid } from "@/components/DashboardGrid";
+import { DashboardGridDnd } from "@/components/DashboardGridDnd";
 import { MetricsSelector } from "@/components/MetricsSelector";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DashboardSettings } from "@/components/DashboardSettings";
@@ -102,7 +102,7 @@ function DashboardControls() {
           Import
         </Button>
       </Link>
-      
+
       <DashboardSettings />
       <ThemeToggle />
     </div>
@@ -228,7 +228,7 @@ function MoodDashboardContent() {
             </TabsList>
 
             <TabsContent value="dashboard" className="space-y-6">
-              <DashboardGrid />
+              <DashboardGridDnd />
             </TabsContent>
 
             <TabsContent value="analytics" className="space-y-6">

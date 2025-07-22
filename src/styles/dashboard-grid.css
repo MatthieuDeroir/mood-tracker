@@ -1,0 +1,164 @@
+/* Dashboard Grid Styles */
+
+/* Stat Cards */
+.stat-card {
+  background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
+  border: 0;
+  box-shadow: var(--shadow-sm);
+  transition: all 300ms;
+  cursor: default;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.stat-card-content {
+  padding: 1rem;
+}
+
+.stat-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.stat-card-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-card-icon {
+  width: 1rem;
+  height: 1rem;
+  transition: transform 200ms;
+}
+
+.group:hover .stat-card-icon {
+  transform: scale(1.1);
+}
+
+.stat-card-value {
+  margin-bottom: 0.75rem;
+}
+
+.stat-card-value span {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
+
+.stat-card-trend {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Card variants */
+.stat-card-humeur {
+  --tw-gradient-from: hsl(var(--chart-1) / 0.1);
+  --tw-gradient-to: hsl(var(--chart-1) / 0.05);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.stat-card-sommeil {
+  --tw-gradient-from: hsl(var(--chart-2) / 0.1);
+  --tw-gradient-to: hsl(var(--chart-2) / 0.05);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.stat-card-énergie {
+  --tw-gradient-from: hsl(var(--chart-3) / 0.1);
+  --tw-gradient-to: hsl(var(--chart-3) / 0.05);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.stat-card-stress {
+  --tw-gradient-from: hsl(var(--chart-4) / 0.1);
+  --tw-gradient-to: hsl(var(--chart-4) / 0.05);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.stat-card-travail {
+  --tw-gradient-from: hsl(var(--chart-5) / 0.1);
+  --tw-gradient-to: hsl(var(--chart-5) / 0.05);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.stat-card-social {
+  --tw-gradient-from: hsl(var(--primary) / 0.1);
+  --tw-gradient-to: hsl(var(--primary) / 0.05);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.stat-card-entrées {
+  --tw-gradient-from: hsl(var(--accent) / 0.1);
+  --tw-gradient-to: hsl(var(--accent) / 0.05);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+/* Dashboard notification banner */
+.dashboard-banner {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background-color: hsl(var(--primary) / 0.1);
+  border: 1px solid hsl(var(--primary) / 0.2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.dashboard-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .dashboard-banner-content {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.dashboard-banner-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dashboard-banner-indicator {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: hsl(var(--primary));
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.dashboard-banner-heading {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: hsl(var(--primary));
+}
+
+.dashboard-banner-instructions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: hsl(var(--primary) / 0.8);
+}
+
+.dashboard-banner-instruction {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}

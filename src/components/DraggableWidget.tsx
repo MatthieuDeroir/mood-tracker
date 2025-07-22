@@ -3,6 +3,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import '@/styles/draggable-widget.css';
 import { 
   GripHorizontal, 
   Settings, 
@@ -33,7 +34,7 @@ export function DraggableWidget({
   isVisible = true 
 }: DraggableWidgetProps) {
   const { state, dispatch } = useDashboard();
-  
+
   const widget = state.widgets.find(w => w.id === id);
   if (!widget) return null;
 
@@ -45,23 +46,24 @@ export function DraggableWidget({
     // TODO: Open settings modal
     console.log('Settings for widget:', id);
   };
-  
+
   const handleToggleSize = () => {
     dispatch({ type: 'TOGGLE_WIDGET_SIZE', payload: id });
   };
-  
+
   const handleToggleFavorite = () => {
     dispatch({ type: 'TOGGLE_FAVORITE', payload: id });
   };
-  
+
+  // Disable click handler to avoid interfering with react-grid-layout's functionality
   const handleWidgetClick = (e: React.MouseEvent) => {
-    // Only trigger size toggle if we're not in editing mode and not clicking on controls
-    if (!state.isEditing && !e.currentTarget.classList.contains('drag-handle')) {
-      const target = e.target as HTMLElement;
-      // Don't toggle if clicking on interactive elements
-      if (!target.closest('button') && !target.closest('.widget-controls')) {
-        handleToggleSize();
-      }
+    // Only handle clicks on buttons and controls
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('.widget-controls')) {
+      // Let the event propagate normally
+    } else {
+      // Prevent the event from propagating to react-grid-layout
+      e.stopPropagation();
     }
   };
 
@@ -71,28 +73,14 @@ export function DraggableWidget({
 
   return (
     <Card 
-      className={`relative group animate-in hover-lift ${className} bg-gradient-to-br from-card via-card to-card/95 border shadow-md transition-all duration-300 ${
-        widget.isFavorite ? 'ring-2 ring-primary/20 shadow-lg' : ''
-      } ${
-        !state.isEditing ? 'cursor-pointer hover:shadow-lg hover:scale-[1.02]' : ''
-      }`}
+      className={`draggable-widget ${className} ${widget.isFavorite ? 'favorite' : ''}`}
       onClick={handleWidgetClick}
     >
-      {/* Drag Handle - Only visible in editing mode */}
-      {state.isEditing && (
-        <div className="absolute top-3 left-3 z-20 opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:scale-110 drag-handle">
-          <div className="flex items-center gap-1 bg-primary/10 backdrop-blur-md rounded-lg px-3 py-2 border border-primary/20 shadow-lg cursor-grab active:cursor-grabbing">
-            <GripHorizontal className="w-4 h-4 text-primary pointer-events-none" />
-            <span className="text-xs text-primary font-medium pointer-events-none">Drag</span>
-          </div>
-        </div>
-      )}
+      {/* Removed custom drag indicator to avoid conflicts with react-grid-layout */}
 
       {/* Widget Controls */}
-      <div className={`absolute top-3 right-3 z-20 widget-controls transition-all duration-300 ${
-        state.isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-      }`}>
-        <div className="flex items-center gap-1 bg-card/90 backdrop-blur-md rounded-lg border shadow-lg">
+      <div className={`widget-controls ${state.isEditing ? 'editing' : ''}`}>
+        <div className="widget-controls-container">
           {/* Favorite Toggle - Always visible on hover */}
           <Button
             size="sm"
@@ -108,7 +96,7 @@ export function DraggableWidget({
           >
             {widget.isFavorite ? <Star className="w-3 h-3 fill-current" /> : <StarOff className="w-3 h-3" />}
           </Button>
-          
+
           {/* Size Toggle - Always visible on hover */}
           <Button
             size="sm"
@@ -125,7 +113,7 @@ export function DraggableWidget({
               <Minimize2 className="w-3 h-3" />
             }
           </Button>
-          
+
           {/* Editing Controls - Only visible in editing mode */}
           {state.isEditing && (
             <>
@@ -158,13 +146,11 @@ export function DraggableWidget({
         </div>
       </div>
 
-      <CardHeader className={`pb-4 pt-12 px-6 ${state.isEditing ? 'drag-handle cursor-grab' : ''}`}>
-        <CardTitle className="text-base font-semibold flex items-center gap-3 text-foreground pointer-events-none">
-          <div className={`w-2 h-2 rounded-full transition-colors ${
-            widget.isFavorite ? 'bg-yellow-500' : 'bg-primary'
-          }`}></div>
+      <CardHeader className="widget-header">
+        <CardTitle className="widget-title">
+          <div className={`widget-title-indicator ${widget.isFavorite ? 'favorite' : 'default'}`}></div>
           <span>{title}</span>
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="widget-title-badges">
             <Badge variant="outline" className="text-xs px-2 py-0.5">
               {widget.size}
             </Badge>
@@ -176,13 +162,15 @@ export function DraggableWidget({
           </div>
         </CardTitle>
       </CardHeader>
-      
-      <CardContent className="pt-0 px-6 pb-6">
+
+      <CardContent className="widget-content">
         {children}
       </CardContent>
-      
+
       {/* Subtle gradient overlay for depth */}
-      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-primary/5 rounded-lg pointer-events-none" />
+      <div className="widget-gradient-overlay" />
+
+      {/* Removed custom resize indicator to avoid conflicts with react-grid-layout */}
     </Card>
   );
 }
